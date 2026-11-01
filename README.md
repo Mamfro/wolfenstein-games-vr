@@ -1,12 +1,10 @@
 # Wolfenstein VR
 
 Play Wolfenstein: The New Order and Wolfenstein: The Old Blood in VR. Features:
-* Your hands and the guns they hold follow your controllers, two guns when dual wielding
-* Aim where your controllers point, or where you look
-* The ammo counters sit on the guns instead of flat in front of you
-* Swing the knife to stab, and throw it along your swing
-* Cutscenes keep the horizon level and let you look around
-* In The New Order: hotwire panels with your hands, and ammo is picked up as you walk over it
+* Independent hand/gun controls with finger tracking
+* The ammo counters sit on the guns (on your palms)
+* Swing the knife to stab, and when equipped, hold RT and release to throw
+
 
 This is a game pack for [Monaka VR](https://github.com/Mamfro/monaka_vr), which runs it.
 
@@ -21,22 +19,8 @@ This is a game pack for [Monaka VR](https://github.com/Mamfro/monaka_vr), which 
 
 | Game | Status | Controls | Aim | HUD |
 |---|---|---|---|---|
-| **Wolfenstein: The New Order** | Alpha | Motion controls | Head, controller | Dynamic HUD |
-| **Wolfenstein: The Old Blood** | Experimental | Motion controls | Head, controller | Dynamic HUD (not yet checked in a headset) |
-
-**Status Meaning**, from most to least finished:
-- **Beta**: I'm confident that you can play the whole game this way. Small features/polish and deeper integration may be lacking.
-- **Alpha**: I'm somewhat confident you can play the whole game this way, but I haven't played multiple hours at a time.
-- **Pre-alpha**: It runs, but probably will be a bad experience. Very rough edges remain.
-- **Experimental**: Probably runs, but rough. May crash and will work incorrectly.
-
-**Motion controls**: your VR controllers work as a gamepad, and your in-game hands and what they
-hold follow the controllers.
-
-**Aim**: what points your weapon. **Head** means you aim where you look; **Controller** means you
-aim where a controller points. Turning with the stick still works on top.
-
-**HUD**: **Dynamic** puts pieces of the HUD on your hands.
+| **Wolfenstein: The New Order** | Alpha | Motion controls | 6DOF | Dynamic HUD |
+| **Wolfenstein: The Old Blood** | Experimental | Motion controls | 6DOF | Dynamic HUD |
 
 Currently only the **Steam** versions are supported.
 
@@ -66,9 +50,8 @@ add the newer zip the same way: it replaces the old one.
 
 ## Known bugs
 
-* Aiming the mech with your hands has not been tried in a headset yet.
-* The Old Blood has fallen behind The New Order: most features added since its first version have
-  only been checked in The New Order.
+* The beginning of Chapter 14 is slightly bugged and BJ is not able to get off of the floor. Exiting and re-entering VR fixes it.
+* Grenades are not physically throwable yet, they simply are throwable with the right trigger when equipped. I need to make them work the same as knives.
 
 ## For developers
 
