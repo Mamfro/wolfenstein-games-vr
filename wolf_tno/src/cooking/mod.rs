@@ -9,5 +9,6 @@ pub(crate) mod frame_pacing;
 pub(crate) mod frame_rate;
 pub(crate) mod head;
 pub(crate) mod hud;
+pub(crate) mod journal;
 pub(crate) mod knife_throw;
 pub(crate) mod sights;

@@ -8,13 +8,30 @@
 //! down the weapon's sights ([`put_dominant_eye`]), and while aiming down sights the head's
 //! position slides onto the game camera, so the sights line up whatever `head_position` says
 //! ([`sighting`], [`head_position`]).
+//!
+//! No aiming down sights from the pad, though: in VR the gun is aimed where it points, and the
+//! game's zoom only narrows the view. On foot with one gun the left trigger (the game's zoom) is
+//! let go before the game reads it ([`no_zoom`]).
 
 use crate::eyes::DominantEye;
+use crate::providers::{camera_taken, held_item};
+use monaka_contract::gamepad::Gamepad;
 use monaka_core::options::Shared;
-use monaka_contract::manifest::{Kind, Opt, Shown, opt};
 use monaka_contract::protocol::HeadPose;
 
-pub const SIGHT_LOCK: Opt = opt("sight_lock", "Line up the sights", "Moves your eyes onto the sights while aiming down them.", Kind::Switch { default: true }).on(Shown::Game).dev();
+/// In the pad the game reads: the left trigger let go while it would only zoom ([`zooms`]).
+pub fn no_zoom(pad: &mut Gamepad) {
+    if zooms(held_item::dual(), camera_taken::controlled() || camera_taken::mounted()) {
+        pad.left_trigger = 0;
+    }
+}
+
+/// Whether the left trigger is the game's zoom: on foot with one gun. With two guns it fires the
+/// left one; on a mounted gun, in the mech or a car (another camera on the view) it is that
+/// machine's (firing, reversing).
+pub fn zooms(dual: bool, other_camera: bool) -> bool {
+    !dual && !other_camera
+}
 
 /// Where the head's position puts the view (metres): the head model's, slid onto the game camera
 /// as far as the view is `sighted` ([`sighting`]).

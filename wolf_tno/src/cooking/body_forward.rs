@@ -17,9 +17,12 @@ use monaka_contract::gamepad::Gamepad;
 pub const HEAD_SHARE_OUT: f32 = 0.5;
 
 /// The pad the game reads, last (`monaka_pad::rewrite`): the knife thrown by the trigger
-/// (`cooking::knife_throw`), the left stick halfway onto the body's heading, and the right trigger
-/// let go while swings attack (`providers::melee`).
+/// (`cooking::knife_throw`), the left stick halfway onto the body's heading, the right trigger
+/// let go while swings attack (`providers::melee`), the left one while it would only zoom
+/// (`cooking::sights`), and Y held opening the journal (`cooking::journal`).
 pub fn pad(pad: &mut Gamepad) {
+    crate::cooking::sights::no_zoom(pad);
+    crate::cooking::journal::pad(pad);
     // The knife's throw reads the trigger before the swings let go of it.
     crate::cooking::knife_throw::pad(pad);
     crate::providers::melee::let_go_of_trigger(pad);

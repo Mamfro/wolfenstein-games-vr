@@ -1,5 +1,5 @@
 //! The mech's aim by its levers: in The New Order's mech the driver pulls both levers back to aim
-//! up and pushes them forward to aim down; with this on (`mech_levers`, on by default) the player
+//! up and pushes them forward to aim down; with this on (`mech_levers`, off by default) the player
 //! does the same with both controllers.
 //!
 //! How far the controllers' midpoint is ahead of the head, along the head's level heading, is
@@ -29,12 +29,12 @@ pub const MECH_LEVERS_OPTION: Opt = opt(
     "mech_levers",
     "Aim the mech with your hands",
     "Pull both controllers back to aim up, push them forward to aim down. Off: the right stick aims it.",
-    Kind::Switch { default: true },
+    Kind::Switch { default: false },
 )
 .on(Shown::Game)
 .dev();
 
-/// The mech aimed up and down by the controllers (`mech_levers`, on by default).
+/// The mech aimed up and down by the controllers (`mech_levers`, off by default).
 pub const MECH_LEVERS: Component<Wolf> = Component {
     name: "mech_levers",
     games: &["wolf_tno"],
@@ -46,7 +46,7 @@ pub const MECH_LEVERS: Component<Wolf> = Component {
 };
 
 /// The mech aimed by the right stick (`mech_levers=0`).
-pub const SWITCH: Switch = Switch::new("mech_levers", true, "the right stick aims the mech");
+pub const SWITCH: Switch = Switch::new("mech_levers", false, "the right stick aims the mech");
 
 pub(crate) const MECH_LEVERS_AT: usize = place::<Wolf>(&MECH_LEVERS);
 

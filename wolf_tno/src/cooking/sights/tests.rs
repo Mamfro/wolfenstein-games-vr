@@ -27,3 +27,10 @@ fn aiming_down_sights_is_read_from_the_zoom() {
     assert_eq!(sighting(f32::NAN, 80.0), 0.0);
     assert_eq!(sighting(65.0, 0.0), 0.0);
 }
+
+#[test]
+fn the_left_trigger_zooms_only_on_foot_with_one_gun() {
+    assert!(zooms(false, false));
+    assert!(!zooms(true, false), "two guns: it fires the left one");
+    assert!(!zooms(false, true), "a mounted gun, the mech or a car: theirs");
+}

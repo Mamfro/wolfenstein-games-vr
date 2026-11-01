@@ -115,7 +115,7 @@ impl EyeSettings {
             units_per_metre: UNITS_PER_METRE,
             screen_separation: options.number("screen_separation", -1.0, 1.0, 0.0),
             dominant_eye: options.choice("dominant_eye", &eyes, dominant_default),
-            sight_lock: options.switch("sight_lock", manifest.switch_default("sight_lock").unwrap_or(true)),
+            sight_lock: true,
             god_rays: options.switch("god_rays", false),
             flares: options.switch("flares", false),
             reflections: options.switch("reflections", false),

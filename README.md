@@ -36,6 +36,17 @@ Currently only the **Steam** versions are supported.
 Then play as Monaka VR's README says: pick the game, start SteamVR, press **Start VR**. To update,
 add the newer zip the same way: it replaces the old one.
 
+## VR Controls
+
+LT/RT: Fire weapon
+LB: Sprint
+RB: Weapon Wheel
+
+A/B/X/Y: Same as in-game
+Hold Y: Journal/Notes/etc screen
+
+ADS has been removed, since you can actually do it with your own hands.
+
 ## What works
 
 | | The New Order | The Old Blood |
