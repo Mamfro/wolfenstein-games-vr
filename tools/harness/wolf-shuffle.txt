@@ -1,0 +1,18 @@
+# Wolfenstein: the wall shuffle with the knife out, hands in view. Stand in it before the run.
+0     head 0 -35
+0     pad none 0 0
+0     hand right 0.18 -0.15 -0.4 0 -20
+0     hand left -0.18 -0.15 -0.4 0 -20
+500   focus WolfNewOrder_x64.exe
+2000  save still
+2200  stick -0.6 0 0 0
+2800  save left-a
+3000  save left-b
+3200  save left-c
+4200  stick 0.6 0 0 0
+4800  save right-a
+5000  save right-b
+5200  save right-c
+6200  stick 0 0 0 0
+7000  save after
+7500  end

@@ -1,0 +1,40 @@
+[package]
+name = "monaka_wolf_tno"
+description = "Wolfenstein: The New Order producer (id Tech 5, OpenGL): the engine's own side-by-side stereo, published by the same-frame loop at SwapBuffers and injected by monaka_loader."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "monaka_wolf_tno"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+eng_idt = { path = "../shared" }
+monaka_body.workspace = true
+monaka_contract.workspace = true
+monaka_core.workspace = true
+monaka_channel.workspace = true
+monaka_hook.workspace = true
+monaka_pad.workspace = true
+monaka_producer.workspace = true
+monaka_stereo.workspace = true
+
+[dependencies.windows]
+workspace = true
+features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_OpenGL",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Threading",
+]
+
+[dev-dependencies]
+monaka_launch.workspace = true
+
+[lints]
+workspace = true

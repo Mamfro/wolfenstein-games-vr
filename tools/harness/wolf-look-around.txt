@@ -1,0 +1,19 @@
+# Wolfenstein: does the game camera follow head aim? The game must be unpaused where the
+# question is (The Old Blood's opening car ride). Run with probe_view=1: the producer log pairs
+# the game camera's yaw and pitch with the head share baked into each command; the camera
+# following the share keeps "camera minus baked" steady while the head steps left, right and up.
+0     head 0 0
+0     pad none 0 0
+500   focus WolfOldBlood_x64.exe
+2000  save ahead
+2100  head 20 0
+3100  head 40 0
+4000  save left40
+4100  head 0 0
+5100  head -20 0
+6100  head -40 0
+7000  save right40
+7100  head 0 20
+8000  save up20
+8100  head 0 0
+9000  end

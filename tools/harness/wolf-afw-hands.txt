@@ -1,0 +1,13 @@
+# Wolfenstein frame warping with the guns in tracked hands (aim=hand_rig): both controllers held
+# ahead at arm's length, as a player holds them. Saved pairs in a row: with the eyes taking turns
+# each eye is real in one and warped in the next, so a warped hand can be laid over the real one.
+0     head 0 0
+0     pad none 0 0
+0     hand right 0.18 -0.25 -0.40 0 0
+0     hand left -0.18 -0.25 -0.40 0 0
+300   focus WolfNewOrder_x64.exe
+1000  unpause
+3500  save a full
+3520  save b full
+3540  save c full
+4000  end

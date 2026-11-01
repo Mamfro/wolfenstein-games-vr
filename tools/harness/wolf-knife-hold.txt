@@ -1,0 +1,14 @@
+# Wolfenstein: the knife held in the fist. Hold the knife (drawn, in gameplay, unpaused) before the
+# run. The right controller is turned three ways; in every save the knife's handle should sit in
+# the closed hand and the blade turn with the controller.
+0     head 0 0
+0     pad none 0 0
+0     hand right 0.15 -0.25 -0.35 0 0
+0     hand left -0.2 -0.3 -0.35 0 0
+500   focus WolfNewOrder_x64.exe
+2500  save level
+2600  hand right 0.15 -0.2 -0.35 30 40
+4500  save up
+4600  hand right 0.15 -0.3 -0.35 -40 -30
+6500  save down
+6600  end

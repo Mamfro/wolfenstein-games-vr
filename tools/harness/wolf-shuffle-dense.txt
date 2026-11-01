@@ -1,0 +1,26 @@
+# Wolfenstein: the wall shuffle with the knife out, frames 50 ms apart while shuffling (does the
+# knife bob against the hand?). Stand in the shuffle before the run.
+0     head 0 -35
+0     pad none 0 0
+0     hand right 0.18 -0.15 -0.4 0 -20
+0     hand left -0.18 -0.15 -0.4 0 -20
+500   focus WolfNewOrder_x64.exe
+1500  stick -0.8 0 0 0
+2500  save b00
+2550  save b01
+2600  save b02
+2650  save b03
+2700  save b04
+2750  save b05
+2800  save b06
+2850  save b07
+2900  save b08
+2950  save b09
+3000  save b10
+3050  save b11
+3100  save b12
+3150  save b13
+3200  save b14
+3250  save b15
+3500  stick 0 0 0 0
+4000 end

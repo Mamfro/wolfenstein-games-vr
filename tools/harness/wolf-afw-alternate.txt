@@ -1,0 +1,12 @@
+# Wolfenstein frame warping with the eyes alternating (dominant_eye=none): consecutive pairs, so
+# real left frames and real right frames can be compared directly. Run with afw_sources=1: the real
+# eye is untinted, the warped one shows where each pixel came from.
+0     head 0 0
+0     pad none 0 0
+300   focus WolfNewOrder_x64.exe
+1000  unpause
+3000  save a full
+3020  save b full
+3040  save c full
+3060  save d full
+3500  end

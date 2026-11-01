@@ -1,0 +1,15 @@
+# Wolfenstein: does pausing with the head up and resuming with it level leave the view tilted?
+# The game must be unpaused in play. Run with probe_view=1 and stick_pitch_speed=1 (no levelling,
+# which would hide the tilt): the producer log's "camera minus baked" pitch should read the same
+# before the pause and after it. Compare pause_hold=0 (the share is not held over the resume).
+0     head 0 0
+0     pad none 0 0
+500   focus WolfOldBlood_x64.exe
+2000  save ahead
+2100  head 0 25
+3000  save up
+3100  key esc
+4500  head 0 0
+5500  key esc
+7000  save after
+7100  end

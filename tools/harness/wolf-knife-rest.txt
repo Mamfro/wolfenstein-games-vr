@@ -1,0 +1,12 @@
+# Wolfenstein: the knife's resting grip. Hold the knife (drawn, in gameplay, unpaused) before the
+# run. The controllers stay still in front for the game's idle knife animation, twirls included;
+# the producer log's end-of-run "melee grip held longest #1" is the knife's resting grip (the
+# wrist in its attach joint's frame), the value `right_melee_grip` takes.
+0     head 0 0
+0     pad none 0 0
+0     hand right 0.2 -0.3 -0.35 0 0
+0     hand left -0.2 -0.3 -0.35 0 0
+500   focus WolfNewOrder_x64.exe
+2500  save start
+15000 save end
+15100 end

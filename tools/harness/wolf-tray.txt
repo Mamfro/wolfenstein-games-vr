@@ -1,0 +1,16 @@
+# Wolfenstein: the tea tray carried in both hands. Hold the tray (in gameplay, unpaused) before the
+# run. In every save the tray should sit between the controllers, each hand on an edge: level and
+# apart, wide apart, and with the left hand raised (the tray tilts toward the right hand).
+0     head 0 0
+0     pad none 0 0
+0     hand right 0.2 -0.3 -0.35 0 0
+0     hand left -0.2 -0.3 -0.35 0 0
+500   focus WolfNewOrder_x64.exe
+2500  save level
+2600  hand right 0.3 -0.3 -0.35 0 0
+2600  hand left -0.3 -0.3 -0.35 0 0
+4500  save wide
+4600  hand right 0.2 -0.35 -0.35 0 0
+4600  hand left -0.2 -0.15 -0.35 0 0
+6500  save tilted
+6600  end

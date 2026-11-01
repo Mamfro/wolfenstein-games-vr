@@ -1,0 +1,17 @@
+# Wolfenstein frame warping (stereo=afw): the warped eye against the real one. Each saved pair is
+# one real eye (the dominant, right) and the other warped from it with its depth: what stands near
+# should sit apart between the eyes by its disparity, what is far nearly together, with no
+# smearing. The game must be in play where the question is.
+0     head 0 0
+0     pad none 0 0
+0     depth on
+300   focus WolfNewOrder_x64.exe
+1000  unpause
+3000  save ahead full
+3100  head 30 0
+4500  save left30 full
+4600  head 0 -20
+6000  save down20 full
+6100  head 0 0
+7000  save ahead2 full
+7500  end

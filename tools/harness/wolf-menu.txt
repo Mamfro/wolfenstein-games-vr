@@ -1,0 +1,12 @@
+# Wolfenstein: how a paused menu sits in each eye. Leave the game at the menu to check.
+# Compare the menu's place between the eyes (it should be nearer the nose in each by the 2 m
+# disparity) and between the head turned and not (head-locked or left behind).
+0     head 0 0
+0     pad none 0 0
+500   focus WolfNewOrder_x64.exe
+2500  save ahead
+2600  head 20 0
+4000  save turned
+4100  head 0 0
+5500  save back
+5600  end

@@ -1,0 +1,8 @@
+# Wolfenstein: the game kept running (focused, head still, controllers in front) for a minute, for
+# console research during the run (`monaka_play console`).
+0     head 0 0
+0     pad none 0 0
+0     hand right 0.2 -0.3 -0.35 0 0
+0     hand left -0.2 -0.3 -0.35 0 0
+500   focus WolfNewOrder_x64.exe
+60000 end

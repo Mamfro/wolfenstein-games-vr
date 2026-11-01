@@ -1,0 +1,13 @@
+# Wolfenstein: the 2D layer in play against a paused menu. Start in gameplay, unpaused, with the
+# HUD showing. In play the layer is placed per eye (each eye's own straight-ahead point, toward
+# the nose); paused, the frame goes to the flat screen and the layer is the same in both eyes.
+# The producer log's "2D layer draws placed, N of them flat" counts only the paused frames.
+0     head 0 0
+0     pad none 0 0
+500   focus WolfNewOrder_x64.exe
+2500  save play
+2600  pause
+4500  save paused
+4600  unpause
+6500  save resumed
+6600  end

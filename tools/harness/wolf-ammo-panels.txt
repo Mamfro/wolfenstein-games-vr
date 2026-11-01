@@ -1,0 +1,13 @@
+# Wolfenstein: each gun's ammo on the inside of its hand (the dynamic HUD). The game should be in
+# gameplay, unpaused, with a gun drawn. Both hands held out in front, palms turned up a little so
+# the palms face the head; then the head turned. Run with probe_panels=1: the producer writes each
+# ammo panel as an image beside its log.
+0     head 0 -20
+0     pad none 0 0
+0     hand right 0.2 -0.25 -0.4 0 0
+0     hand left -0.2 -0.25 -0.4 0 0
+500   focus WolfNewOrder_x64.exe
+6000  save front
+6100  head 25 -20
+9000  save turned
+9100  end

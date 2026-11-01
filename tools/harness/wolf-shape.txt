@@ -1,0 +1,11 @@
+# Wolfenstein: a large translucent shape in one eye only. Stand where it shows, in gameplay,
+# unpaused, facing it. Run once as is, then with probe_cvars switching one renderer feature off
+# (for example dim shadows: r_skipDimShadows@0x1d163a0=1) and compare the eyes in all three
+# saves: the run where it is gone in every save names it.
+0     head 0 0
+0     pad none 0 0
+500   focus WolfNewOrder_x64.exe
+2500  save first
+3500  save second
+4500  save third
+4600  end

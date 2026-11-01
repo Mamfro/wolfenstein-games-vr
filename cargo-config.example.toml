@@ -1,0 +1,7 @@
+# Optional: copy this file to `.cargo/config.toml` (git-ignored) so the Wolfenstein DLL is built
+# into Monaka's `target`, beside the launcher, instead of this repository's own. Then name it in
+# Monaka's `local/dev-games.txt` (monaka_wolf_tno.dll), and the Monaka window and `monaka_play`
+# offer it as a local build.
+
+[build]
+target-dir = "../../monaka_vr/target"

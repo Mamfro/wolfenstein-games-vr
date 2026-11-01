@@ -1,0 +1,15 @@
+[package]
+name = "eng_idt"
+description = "Facts about id Tech 5 and 6 (and the Void engine fork): cvars by the pointer to their name, overrides put back at stop, the camera convention."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+monaka_core.workspace = true
+monaka_hook.workspace = true
+monaka_producer.workspace = true
+
+[lints]
+workspace = true

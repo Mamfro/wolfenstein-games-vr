@@ -1,0 +1,145 @@
+# Wolfenstein: each pair's image against its pose. The head sweeps left at 125 degrees a second
+# while pairs are saved one frame apart; each save prints the pose the pair went out with. A
+# pair whose image is another frame's than its pose moves by the wrong amount from its neighbours
+# (the pose-match script among the research tools).
+0     head 0 0
+0     pad none 0 0
+0     hand right 0.2 -0.3 -0.35 0 0
+0     hand left -0.2 -0.3 -0.35 0 0
+500   focus WolfNewOrder_x64.exe
+2500  head -30 0
+3004  head -29.5 0
+3008  head -29 0
+3012  head -28.5 0
+3016  head -28 0
+3020  head -27.5 0
+3024  head -27 0
+3028  head -26.5 0
+3032  head -26 0
+3036  head -25.5 0
+3040  head -25 0
+3044  head -24.5 0
+3048  head -24 0
+3052  head -23.5 0
+3056  head -23 0
+3060  head -22.5 0
+3064  head -22 0
+3068  head -21.5 0
+3072  head -21 0
+3076  head -20.5 0
+3080  head -20 0
+3084  head -19.5 0
+3088  head -19 0
+3092  head -18.5 0
+3096  head -18 0
+3100  head -17.5 0
+3104  head -17 0
+3108  head -16.5 0
+3112  head -16 0
+3116  head -15.5 0
+3120  head -15 0
+3124  head -14.5 0
+3128  head -14 0
+3132  head -13.5 0
+3136  head -13 0
+3140  head -12.5 0
+3144  head -12 0
+3148  head -11.5 0
+3152  head -11 0
+3156  head -10.5 0
+3160  head -10 0
+3164  head -9.5 0
+3164  save s01
+3168  head -9 0
+3172  head -8.5 0
+3176  head -8 0
+3180  head -7.5 0
+3180  save s02
+3184  head -7 0
+3188  head -6.5 0
+3192  head -6 0
+3196  head -5.5 0
+3196  save s03
+3200  head -5 0
+3204  head -4.5 0
+3208  head -4 0
+3212  head -3.5 0
+3216  head -3 0
+3216  save s04
+3220  head -2.5 0
+3224  head -2 0
+3228  head -1.5 0
+3232  head -1 0
+3232  save s05
+3236  head -0.5 0
+3240  head 0 0
+3244  head 0.5 0
+3248  head 1 0
+3248  save s06
+3252  head 1.5 0
+3256  head 2 0
+3260  head 2.5 0
+3264  head 3 0
+3264  save s07
+3268  head 3.5 0
+3272  head 4 0
+3276  head 4.5 0
+3280  head 5 0
+3284  head 5.5 0
+3284  save s08
+3288  head 6 0
+3292  head 6.5 0
+3296  head 7 0
+3300  head 7.5 0
+3300  save s09
+3304  head 8 0
+3308  head 8.5 0
+3312  head 9 0
+3316  head 9.5 0
+3316  save s10
+3320  head 10 0
+3324  head 10.5 0
+3328  head 11 0
+3332  head 11.5 0
+3332  save s11
+3336  head 12 0
+3340  head 12.5 0
+3344  head 13 0
+3348  head 13.5 0
+3352  head 14 0
+3352  save s12
+3356  head 14.5 0
+3360  head 15 0
+3364  head 15.5 0
+3368  head 16 0
+3368  save s13
+3372  head 16.5 0
+3376  head 17 0
+3380  head 17.5 0
+3384  head 18 0
+3384  save s14
+3388  head 18.5 0
+3392  head 19 0
+3396  head 19.5 0
+3400  head 20 0
+3404  head 20.5 0
+3408  head 21 0
+3412  head 21.5 0
+3416  head 22 0
+3420  head 22.5 0
+3424  head 23 0
+3428  head 23.5 0
+3432  head 24 0
+3436  head 24.5 0
+3440  head 25 0
+3444  head 25.5 0
+3448  head 26 0
+3452  head 26.5 0
+3456  head 27 0
+3460  head 27.5 0
+3464  head 28 0
+3468  head 28.5 0
+3472  head 29 0
+3476  head 29.5 0
+3480  head 30 0
+3980 end
