@@ -153,7 +153,7 @@ fn lever_change(mech: usize) -> Option<f32> {
     Some((aim - pitch) / scale)
 }
 
-/// `idPlayerControlledFaust::UpdateViewAngles`: the pitch change the hands ask for in place of the
+/// The mech's view angles update: the pitch change the hands ask for in place of the
 /// commands'; the yaw change as the commands give it.
 unsafe extern "system" fn view_angles(mech: usize, pitch: f32, yaw: f32) {
     let flight = InFlight::enter();

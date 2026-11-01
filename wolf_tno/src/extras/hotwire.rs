@@ -190,7 +190,7 @@ fn note_springs(event: usize) {
     log!("hotwire: frame {driven} by the hands: springs left {} right {}", spring(HOTWIRE_SPRINGS[0]), spring(HOTWIRE_SPRINGS[1]));
 }
 
-/// `idHotWireEvent::UpdateHotwiring`: the controllers' values in the player's command for the
+/// The hotwiring minigame's update: the controllers' values in the player's command for the
 /// update, the command's own given back after it.
 unsafe extern "system" fn update(event: usize, player: usize) {
     let flight = InFlight::enter();

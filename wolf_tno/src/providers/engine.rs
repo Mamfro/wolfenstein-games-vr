@@ -946,7 +946,7 @@ pub struct Minigame {
 /// limits), as a mounted gun does.
 #[derive(Clone, Copy, Debug)]
 pub struct Driven {
-    /// A presentable: its entity (as `idPresentablePlayer::AddControl` reads it).
+    /// A presentable: its entity (as the presentable player reads it when it takes control).
     pub entity: usize,
     /// `idPlayerControlled::CastTo(entity) -> entity or null` (rva, [`CastFn`]): asks the entity's
     /// type, nothing else.
@@ -962,7 +962,7 @@ pub type CastFn = unsafe extern "system" fn(usize) -> usize;
 /// down positive). The driver's arms pull the levers by that change.
 #[derive(Clone, Copy, Debug)]
 pub struct MechAim {
-    /// `idPlayerControlledFaust::UpdateViewAngles(mech, pitch change, yaw change)`.
+    /// The mech's view angles update (mech, pitch change, yaw change).
     pub view_angles: Site<MechViewAnglesFn>,
     /// `idPlayerControlled`: the view angles' pitch, the look limits' pitches (f32).
     pub pitch: usize,
@@ -982,7 +982,7 @@ pub type MechViewAnglesFn = unsafe extern "system" fn(usize, f32, f32);
 /// close enough in the player's view, and a touch held long enough clears a stage.
 #[derive(Clone, Copy, Debug)]
 pub struct Hotwire {
-    /// `idHotWireEvent::UpdateHotwiring(event, idPlayer)` ([`HotwireUpdateFn`]): only while the
+    /// The hotwiring minigame's update (event, `idPlayer`) ([`HotwireUpdateFn`]): only while the
     /// player hotwires; the player null when there is none.
     pub update: Site<HotwireUpdateFn>,
     /// `idPresentablePlayer`: the command its use of the player reads (`usercmd_t`).
