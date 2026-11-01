@@ -61,8 +61,9 @@ ADS has been removed, since you can actually do it with your own hands.
 
 ## Known bugs
 
-* The beginning of Chapter 14 is slightly bugged and BJ is not able to get off of the floor. Exiting and re-entering VR fixes it.
+* The beginning of Chapter 14 is slightly bugged and BJ is not able to get off of the floor. Exiting and re-entering VR fixes it. I have not been able to track down a fix for this yet since, well, in order to debug the issue I need to exit VR, which fixes it.
 * Grenades are not physically throwable yet, they simply are throwable with the right trigger when equipped. I need to make them work the same as knives.
+* Blood textures and bullet hole textures may differ per eye in rare situations
 
 ## For developers
 
