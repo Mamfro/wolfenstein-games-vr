@@ -11,9 +11,10 @@ This is a game pack for [Monaka VR](https://github.com/Mamfro/monaka_vr), which 
 > **Alpha.** Expect bugs and missing pieces. Until Monaka's API settles, things change often,
 > and a pack made for an older Monaka may stop working with a newer one.
 >
-> **Before you play,** start the game from Steam first. God rays, lens flares, dim shadows and
-> screen-space reflections are switched off while VR runs (the game only gets them right in one
-> eye).
+> **To play,** press Play in Monaka VR: it starts the game itself (or joins it if it is already
+> running). Starting the game from Steam while SteamVR runs puts it on SteamVR's flat Theater
+> screen instead. God rays, lens flares, dim shadows and screen-space reflections are switched off
+> while VR runs (the game only gets them right in one eye).
 
 ## Games
 

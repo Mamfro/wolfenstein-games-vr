@@ -10,7 +10,7 @@ use monaka_producer::game::{options, options_len};
 const OPTIONS: [Opt; options_len::<Wolf>("wolf_tno")] = options::<Wolf, { options_len::<Wolf>("wolf_tno") }>("wolf_tno");
 const TOB_OPTIONS: [Opt; options_len::<Wolf>("wolf_tob")] = options::<Wolf, { options_len::<Wolf>("wolf_tob") }>("wolf_tob");
 
-const BEFORE: &str = "Start the game from Steam first. God rays, lens flares, dim shadows and screen-space reflections are switched off while VR runs (the game only gets them right in one eye).";
+const BEFORE: &str = "Press Play: Monaka starts the game (or joins it when it already runs). God rays, lens flares, dim shadows and screen-space reflections are switched off while VR runs (the game only gets them right in one eye).";
 
 /// One producer for both games: the running executable picks its engine facts (`engine::ROWS`).
 pub const MANIFESTS: &[Manifest] = &[
@@ -29,6 +29,7 @@ pub const MANIFESTS: &[Manifest] = &[
         // A gun in each hand when dual wielding: a ring on each.
         left_hand_aims: true,
         weapon_ring: true,
+        launch: Launch::AtStart,
         ..Manifest::GAME
     },
     Manifest {
@@ -45,6 +46,7 @@ pub const MANIFESTS: &[Manifest] = &[
         options: &TOB_OPTIONS,
         left_hand_aims: true,
         weapon_ring: true,
+        launch: Launch::AtStart,
         ..Manifest::GAME
     },
 ];
