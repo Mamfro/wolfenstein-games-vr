@@ -22,6 +22,7 @@ monaka_launch = { path = "../../monaka_vr/crates/launch" }
 monaka_pad = { path = "../../monaka_sdk/crates/pad" }
 monaka_producer = { path = "../../monaka_sdk/crates/producer" }
 monaka_stereo = { path = "../../monaka_sdk/crates/stereo" }
+monaka_warp = { path = "../../monaka_sdk/crates/warp" }
 windows = "0.62"
 
 [workspace.lints.rust]

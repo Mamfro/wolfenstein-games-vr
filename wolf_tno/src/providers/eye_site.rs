@@ -30,6 +30,7 @@ use eng_idt::MakeFrustumFn;
 use crate::{Facts, Wolf};
 use eng_idt::view::{Players, Saved};
 use monaka_body::look::{self, Share, command};
+use monaka_body::roomscale;
 use monaka_core::camera::{self, Base, EyeView, Frustum, HeadPosition, Mat34};
 use monaka_core::convention::CameraConvention;
 use monaka_core::feature::Feature;
@@ -187,6 +188,14 @@ pub fn render_view() -> Option<[f32; 12]> {
     *RENDER_VIEW.locked()
 }
 
+/// How far the render view points up (degrees), once known.
+pub fn render_view_up() -> Option<f32> {
+    let view = render_view()?;
+    let forward = [view[3], view[4], view[5]];
+    let length = (forward[0] * forward[0] + forward[1] * forward[1] + forward[2] * forward[2]).sqrt().max(f32::EPSILON);
+    Some((forward[2] / length).clamp(-1.0, 1.0).asin().to_degrees())
+}
+
 /// How far along the game camera's forward axis a driven machine's aim is shown (metres): far
 /// enough that both eyes agree on it for what the machine shoots at.
 pub const AIM_DISTANCE: f32 = 20.0;
@@ -254,14 +263,9 @@ fn one_eye_layout(exe: &Module, build: &Build) -> Option<usize> {
     let header = record(build.layout_left_right.0 - engine::LAYOUT_HEADER)?;
     let left = record(build.layout_left_right.0)?;
     let unused = record(build.layout_single.0 + engine::LAYOUT_RECORD)?;
-    let mut view = left;
-    if let Some(scale) = SETUP_SCALE.get().copied().flatten() {
-        // The view's width and height fractions (after name, player, x, y): smaller by the scale.
-        for at in [0x14, 0x18] {
-            let fraction = f32::from_le_bytes(view[at..at + 4].try_into().ok()?) / scale;
-            view[at..at + 4].copy_from_slice(&fraction.to_le_bytes());
-        }
-    }
+    // The view fills the window's left half: with an upscaler the window itself is the render size
+    // (`window_size::arm_render`), so no full-size window is drawn around a smaller view.
+    let view = left;
     let records: &'static mut [Record; 4] = Box::leak(Box::new(one_eye_records(header, view, unused)));
     let first_view = records[1].as_ptr() as usize;
     Some(*ONE_EYE.get_or_init(|| first_view))
@@ -291,18 +295,26 @@ pub fn warps(config: &EyeSettings, shared: &Shared, build: &Build) -> bool {
     config.stereo && config.stereo_method == StereoMethod::Afw && shared.head_tracking && shared.headset_fov && build.scene_depth.is_some()
 }
 
-/// The FSR scale (eye size over render size per side) this run upscales by: with frame warping and
-/// FSR chosen.
+/// The scale (eye size over render size per side) this run upscales by with frame warping.
 pub fn fsr_scale(config: &EyeSettings, shared: &Shared, build: &Build) -> Option<f32> {
-    config.fsr.filter(|_| warps(config, shared, build)).map(|fsr| fsr.scale)
+    if !warps(config, shared, build) {
+        return None;
+    }
+    config.fsr.map(|fsr| fsr.scale)
 }
 
 /// Where the eye drawn with frame warping lands in the window (x, y from the top-left, width,
-/// height: fractions), its view at `1 / scale` of a side-by-side eye's size (1: the left half).
-/// A smaller view keeps to the window's bottom-left: GL counts its viewport from the bottom.
-pub fn warp_region(scale: f32) -> [f32; 4] {
-    let (w, h) = (0.5 / scale, 1.0 / scale);
-    [0.0, 1.0 - h, w, h]
+/// height: fractions): its left half. With an upscaler the window is made the render size
+/// (`window_size::arm_render`), so the half is the render size too.
+pub const WARP_REGION: [f32; 4] = [0.0, 0.0, 0.5, 1.0];
+
+/// The eye size an upscaler brings the warped eye to, as fractions of the window (beyond 1 when
+/// larger): `display` over `render` per side, of the left half; else `scale` times the half.
+pub fn warp_display(render_display: Option<((u32, u32), (u32, u32))>, scale: f32) -> [f32; 2] {
+    match render_display {
+        Some((render, display)) if render.0 > 0 && render.1 > 0 => [0.5 * display.0 as f32 / render.0 as f32, display.1 as f32 / render.1 as f32],
+        _ => [0.5 * scale, scale],
+    }
 }
 
 /// Switches the engine to side-by-side stereo with our eye separation, remembering what it had
@@ -410,6 +422,28 @@ static BUILDING_THREAD: AtomicU32 = AtomicU32::new(0);
 static EYE_CALLS: AtomicU32 = AtomicU32::new(0);
 /// The pose of the frame being built.
 static FRAME_POSE: Mutex<Option<HeadPose>> = Mutex::new(None);
+/// Both eyes drawn with one vertical field of view ([`share_vertical`]).
+static SHARED_VERTICAL: AtomicBool = AtomicBool::new(false);
+
+/// Whether both eyes are drawn with one vertical field of view, both eyes' together (single pass:
+/// its hardware draws the right eye's copy of a draw at the left eye's height, taking only the `x`
+/// of the right eye's position, so a right eye framed higher or lower than the left would show the
+/// world off by that much, about a degree on a Beyond).
+pub fn share_vertical(on: bool) {
+    SHARED_VERTICAL.store(on, Relaxed);
+}
+
+/// `pose` with both eyes' fields of view spanning both eyes' up and down (the pose record says the
+/// same, so the headset shows each eye with the frustum it was drawn with).
+pub fn shared_vertical(mut pose: HeadPose) -> HeadPose {
+    let up = pose.fov[0][2].max(pose.fov[1][2]);
+    let down = pose.fov[0][3].min(pose.fov[1][3]);
+    for fov in &mut pose.fov {
+        fov[2] = up;
+        fov[3] = down;
+    }
+    pose
+}
 /// View builds and the player views turned at them (the engine draws both eyes from each).
 static BUILDS: Tally = Tally::new("view builds");
 static PROJECTED: AtomicU64 = AtomicU64::new(0);
@@ -418,6 +452,8 @@ static LAST_COMMANDS: AtomicU64 = AtomicU64::new(0);
 static SIGHTED: AtomicU64 = AtomicU64::new(0);
 /// Frame warping: one eye drawn a frame ([`warps`]).
 static WARPING: AtomicBool = AtomicBool::new(false);
+/// With frame warping, the engine is in its own side-by-side layout for now ([`menu_layout`]).
+static MENU_LAYOUT: AtomicBool = AtomicBool::new(false);
 /// The eye this view build draws (0 left), with frame warping.
 static FRAME_EYE: AtomicUsize = AtomicUsize::new(0);
 /// The projection the engine made for this build's eye (its frustum maker's matrix, game units),
@@ -510,6 +546,12 @@ fn turned_view(
     let placed = HeadPose { position, ..*pose };
     let shared_here = Shared { head_position: HeadPosition::Full, headset_fov, ..*shared };
     let base = Base::game_or_swap(baked.map(|share| [share.yaw, share.pitch]));
+    // Room-scale following: the eyes built on the game camera moved back by what the body walked
+    // for the head (never on a cutscene's or another camera, where the eyes are not the player's).
+    let camera = match roomscale::active() && !levels_camera() && !crate::providers::camera_taken::controlled() {
+        true => roomscale::follow_view(&camera, base, shared.head_position.position(pose)).unwrap_or(camera),
+        false => camera,
+    };
     let centre = EyeView::of(&camera, base, &placed, 0, &shared_here, false, own.fov.map(f32::to_radians))?.centre;
     let (origin, axis) = eng_idt::view::origin_axis(convention, &centre)?;
     let fov = if headset_fov {
@@ -538,7 +580,7 @@ pub fn tracking_space(origin_axis: &[f32; 12], pose: &HeadPose) -> Option<Mat34>
     let convention = eng_idt::camera_convention(setup.config.units_per_metre);
     // The field of view only has to look like one: it is not used.
     let own = eyes_camera(View { origin_axis: *origin_axis, fov: [80.0, 50.0] });
-    let drawn = turned_view(&own, pose, sights::head_position(&setup.shared, pose, 0.0), &setup.config, &setup.shared, &convention, false, look::baked::<Wolf>(None))?;
+    let drawn = turned_view(&own, pose, eyes_position(&setup.shared, pose, 0.0), &setup.config, &setup.shared, &convention, false, look::baked::<Wolf>(None))?;
     let eye = camera_of(&drawn.origin_axis, &convention)?;
     // The hands are tracked against the real head, which the drawn view stands for.
     Some(camera::tracking_space(&eye, pose.orientation, pose.position))
@@ -606,8 +648,12 @@ pub unsafe extern "system" fn view_builder(this: usize, views: usize, a: usize, 
         Some(_) if HEAD_TRACKED.load(Acquire) && crate::on(crate::EYES_AT) => look::command::head_baked().or_else(|| PAIRS.head().current()),
         _ => None,
     };
+    let pose = pose.map(|p| if SHARED_VERTICAL.load(Relaxed) { shared_vertical(p) } else { p });
     let mut saved = Saved::<View, { engine::PLAYER_VIEWS }>::new();
     let warping = WARPING.load(Acquire);
+    if warping {
+        menu_layout(false);
+    }
     let eye = warp_eye(build, setup.filter(|s| s.config.afw_dominant).map(|s| s.config.dominant_eye));
     let mut eye_view = None;
     if let (Some(setup), Some(pose)) = (setup, pose.as_ref()) {
@@ -636,9 +682,18 @@ pub unsafe extern "system" fn view_builder(this: usize, views: usize, a: usize, 
             if sighted > 0.0 {
                 SIGHTED.fetch_add(1, Relaxed);
             }
-            let position = sights::head_position(&setup.shared, pose, sighted);
             let cutscene = levels_camera();
-            let camera = eyes_camera(own);
+            if player == 0
+                && !cutscene
+                && let Some(game) = camera_of(&own.origin_axis, &convention)
+            {
+                crate::cooking::room_scale::step(&game);
+            }
+            let position = eyes_position(&setup.shared, pose, sighted);
+            // On a mounted gun aimed by the right controller, the eyes keep the view the player got
+            // on with (`turret_aim`): the gun turns in a world that stays put.
+            let eyes_on = View { origin_axis: crate::cooking::turret_aim::anchored(player, own.origin_axis), ..own };
+            let camera = eyes_camera(eyes_on);
             let turned = turned_view(&camera, pose, position, &setup.config, &setup.shared, &convention, setup.shared.headset_fov, baked).map(|mut turned| {
                 crate::research::view::with_extra_yaw(&mut turned.origin_axis);
                 turned
@@ -661,7 +716,7 @@ pub unsafe extern "system" fn view_builder(this: usize, views: usize, a: usize, 
                         let shift: [f32; 3] = std::array::from_fn(|k| turned.origin_axis[k] - own.origin_axis[k]);
                         crate::providers::follow_head::set_shift(Some(shift), own_camera);
                         let rows = |v: &View| std::array::from_fn::<f32, 9, _>(|k| v.origin_axis[3 + k]);
-                        crate::providers::follow_head::set_turn(Some((rows(&own), rows(&turned))));
+                        crate::providers::follow_head::set_turn(Some((rows(&eyes_on), rows(&turned))));
                         // Whether the drawn view follows the real head: the tracking space it
                         // gives, while the player's own camera has the view.
                         let space = (!cutscene && !crate::providers::camera_taken::controlled())
@@ -733,6 +788,14 @@ fn levels_camera() -> bool {
     crate::providers::camera_taken::controlled() && !crate::providers::camera_taken::mounted()
 }
 
+/// Where the eyes sit against the camera they are built on for the head's `pose`, `sighted` into
+/// aiming down sights ([`sights::head_position`]): on that camera while [`levels_camera`]. A
+/// cutscene's camera sits where the player's head was drawn, its own head hidden; the real head's
+/// steps and leans would carry the eyes out of the body, so only its turn is taken.
+fn eyes_position(shared: &Shared, pose: &HeadPose, sighted: f32) -> [f32; 3] {
+    if levels_camera() { [0.0; 3] } else { sights::head_position(shared, pose, sighted) }
+}
+
 /// The camera the eyes are built on for the game camera `own` (levelled while
 /// [`levels_camera`]).
 fn eyes_camera(own: View) -> View {
@@ -797,9 +860,54 @@ pub fn warp_shot() -> Option<GlShot> {
     };
     let setup = SETUP.get()?;
     let separation = setup.shared.separation_for(&ticket.pose);
-    let other = <Wolf as EyeGeometry>::frustum(&ticket.pose, 1 - eye);
-    Some(GlShot { shot: Shot::labelled(Pending { eye, pose: ticket.pose }, rendered, separation, other), jitter })
+    let pose = warp_pose(ticket.pose);
+    let other = <Wolf as EyeGeometry>::frustum(&pose, 1 - eye);
+    Some(GlShot { shot: Shot::labelled(Pending { eye, pose }, rendered, separation, other), jitter })
 }
+
+/// The frustum each eye is drawn with under frame warping: the one holding both eyes' own. Each eye
+/// drawn with only its own leaves the other eye's outer side unseen (the headset's eyes look apart):
+/// warped from it, that side came from the eye's own older frame or stayed black (flicker and
+/// smearing at the view's edges, things there gone every other frame).
+pub fn warp_frustum(pose: &HeadPose) -> Option<Frustum> {
+    Frustum::both_eyes(&pose.fov)
+}
+
+/// `pose` as a warped pair goes out: both eyes' field of view [`warp_frustum`], as they were drawn
+/// and warped (the viewer gives the headset each eye's image with it, which shows the eye's part).
+pub fn warp_pose(mut pose: HeadPose) -> HeadPose {
+    if let Some(frustum) = warp_frustum(&pose) {
+        pose.fov = [frustum.fov(); 2];
+    }
+    pose
+}
+
+/// Whether a menu is up (frame warping's side-by-side layout for it is in).
+pub fn in_menu() -> bool {
+    MENU_LAYOUT.load(Relaxed)
+}
+
+/// The engine's side-by-side layout (`menu`) or the one-eye layout of frame warping, switched only
+/// from the other of the two (not after the stop put the game's own back).
+fn menu_layout(menu: bool) {
+    if MENU_LAYOUT.load(Relaxed) == menu {
+        return;
+    }
+    let (Some(setup), Some(&one_eye)) = (SETUP.get(), ONE_EYE.get()) else { return };
+    let setting = LayoutSetting { exe: setup.exe, build: setup.build };
+    let side_by_side = setup.exe.at(setup.build.layout_left_right.0);
+    let (from, to) = if menu { (one_eye, side_by_side) } else { (side_by_side, one_eye) };
+    if setting.read() != Some(from) || !setting.write(&to) {
+        return;
+    }
+    MENU_LAYOUT.store(menu, Relaxed);
+    if MENU_SWITCHES.fetch_add(1, Relaxed) < 20 {
+        log!("frame warping: {}", if menu { "no view built: the side-by-side layout for the menu, both halves as the pair" } else { "a view built: one eye a frame again" });
+    }
+}
+
+/// Times the menu layout came in or went (logged the first few).
+static MENU_SWITCHES: AtomicU64 = AtomicU64::new(0);
 
 /// FSR's jitter phases for `scale` (eye size over render size per side): AMD's count, 8 times the
 /// pixel ratio.
@@ -847,6 +955,14 @@ pub fn near_metres() -> Option<f32> {
 /// The scene's depth texture now (`engine::SceneDepth`), behind the frame being presented.
 pub fn scene_depth() -> Option<GlDepth> {
     static SEEN: AtomicBool = AtomicBool::new(false);
+    static PAIRED: AtomicBool = AtomicBool::new(false);
+    // Single pass: the engine's texture holds one eye; both eyes' layers side by side instead.
+    if let Some((texture, width, height)) = crate::single_pass::draws::pair_depth() {
+        if !PAIRED.swap(true, Relaxed) {
+            log!("frame warping: scene depth is both eyes' layers side by side, GL texture {texture}, {width}x{height}");
+        }
+        return Some(GlDepth { texture, width, height, multisampled: false });
+    }
     let global = SETUP.get()?.scene_depth?;
     let destination = mem::read::<usize>(global).filter(|p| *p != 0)?;
     let image = mem::read::<usize>(destination + engine::DESTINATION_DEPTH).filter(|p| *p != 0)?;
@@ -855,7 +971,7 @@ pub fn scene_depth() -> Option<GlDepth> {
     let height = mem::read::<i32>(image + engine::IMAGE_HEIGHT)?;
     let samples = mem::read::<i32>(image + engine::IMAGE_SAMPLES)?;
     let depth = GlDepth { texture, width: u32::try_from(width).ok()?, height: u32::try_from(height).ok()?, multisampled: samples > 1 };
-    if !SEEN.swap(true, Relaxed) {
+    if !SEEN.swap(true, Relaxed) || PAIRED.swap(false, Relaxed) {
         log!("frame warping: scene depth is GL texture {texture}, {width}x{height}, {samples} samples");
     }
     Some(depth)
@@ -874,14 +990,14 @@ pub unsafe extern "system" fn projection(fov_x: f32, fov_y: f32, near: f32, far:
         let pose = *FRAME_POSE.locked();
         if eye < 2
             && (!warping || call == 0)
-            && let Some(frustum) = pose.and_then(|p| Frustum::from_fov(p.fov[eye]))
+            && let Some(frustum) = pose.and_then(|p| if warping { warp_frustum(&p) } else { Frustum::from_fov(p.fov[eye]) })
             && near.is_finite()
             && near > 0.0
         {
             // With FSR the eye's projection is shifted by its next jitter (render pixels).
             let jitter = match (warping, SETUP_SCALE.get().copied().flatten(), gl_frames::frame_size()) {
                 (true, Some(scale), Some((width, height))) => {
-                    let render = gl_frames::region_size(width, height, warp_region(scale));
+                    let render = gl_frames::region_size(width, height, WARP_REGION);
                     let phases = fsr_phases(scale);
                     let phase = JITTER_PHASE[eye].fetch_add(1, Relaxed) % phases;
                     Some((fsr_jitter(phase), render))

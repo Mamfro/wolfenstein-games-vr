@@ -2,15 +2,19 @@ use super::*;
 use crate::manifest::MANIFESTS;
 
 /// The run's settings as the components read them: the shared ones, the eyes', and the frame
-/// rate, view bob, screen shake, body turn, arms, free hand, auto pickup and mech lever switches
-/// their components read.
+/// rate, movement heading, view bob, screen shake, body turn, room scale, arms, free hand, auto
+/// pickup and mech lever switches their components read.
 fn read_all(options: &Options, manifest: &Manifest) {
     Shared::from_options(options, manifest);
     EyeSettings::from_options(options, manifest);
     crate::cooking::frame_rate::ceiling(options);
+    crate::cooking::body_forward::share_out(options);
+    crate::providers::hud_pieces::hides_crosshair(options);
     (crate::providers::settings::SETTINGS.settings)(options, manifest);
+    (crate::SINGLE_PASS.settings)(options, manifest);
     (crate::LOOK.settings)(options, manifest);
     (crate::GUNS.settings)(options, manifest);
+    (crate::cooking::room_scale::ROOM_SCALE.settings)(options, manifest);
     crate::providers::held_item::arms(options);
     crate::cooking::auto_pickup::SWITCH.on(options, manifest);
     crate::extras::mech_levers::SWITCH.on(options, manifest);

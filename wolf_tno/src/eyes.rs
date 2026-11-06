@@ -3,7 +3,7 @@
 
 use monaka_contract::manifest::{Kind, Manifest, Opt, Shown, SteamFiles, choice, opt};
 use monaka_core::options::{Options, Shared};
-use monaka_core::rendering::{FrameGenerator, STEREO_OFF, StereoMethod, frame_generation, stereo_method};
+use monaka_core::rendering::{FrameGenerator, Offer, STEREO_OFF, StereoMethod, frame_generation, stereo_method};
 use monaka_contract::protocol::HeadPose;
 
 /// The eye that sits where the game camera is, so it looks straight down the weapon's sights.
@@ -16,9 +16,31 @@ pub enum DominantEye {
     Right,
 }
 
-/// How the eyes are made: both in one frame by the engine's side-by-side layout (the default), or
-/// one per frame with the other warped from it by its depth (AFW).
-pub const STEREO: Opt = stereo_method(&[StereoMethod::SameFrame.offer(), StereoMethod::Afw.experimental(), STEREO_OFF], StereoMethod::SameFrame);
+/// How the eyes are made: both in one frame by the engine's side-by-side layout, each drawn on its
+/// own ([`TWO_PASS_STEREO`]) or both by one pass ([`SINGLE_PASS_STEREO`]), or one per frame with the
+/// other warped from it by its depth (AFW).
+pub const STEREO: Opt = stereo_method(&[TWO_PASS_STEREO, SINGLE_PASS_STEREO, StereoMethod::Afw.experimental(), STEREO_OFF], StereoMethod::SameFrame).help(STEREO_HELP);
+
+const STEREO_HELP: &str = "Same Frame Stereo renders both eyes in one game frame: Two Pass draws the scene for each eye, Single Pass once for both (faster, NVIDIA only, and the first level load freezes for about 23 seconds). AFW (Frame-warp) renders one eye per frame and warps it into the other eye with its depth. A method marked experimental is not yet this game's default because it is still being proven.";
+
+/// Same-frame stereo as it always was: the engine draws the scene for each eye.
+pub const TWO_PASS_STEREO: Offer = (StereoMethod::SameFrame.value(), "Same Frame Stereo (Two Pass)");
+
+/// Single pass ([`crate::single_pass`]): same-frame stereo with the engine's scene programs
+/// converted to draw both eyes at once. Everything else takes it as [`TWO_PASS_STEREO`]; any other
+/// method leaves single pass off.
+pub const SINGLE_PASS_STEREO: Offer = ("single", "Same Frame Stereo (Single Pass)");
+
+/// Depth of field and film grain, which the single pass otherwise leaves out of the game's shaders
+/// (no cvar turns them off, so the other stereo methods keep them).
+pub const FILM_EFFECTS: Opt = opt("film_effects", "Depth of field and film grain", "The game only gets them right in one eye.", Kind::Switch { default: false })
+    .on(Shown::Rendering)
+    .only_when("stereo", SINGLE_PASS_STEREO.0);
+
+/// Whether the run's stereo method is [`SINGLE_PASS_STEREO`].
+pub fn single_pass_on(options: &Options) -> bool {
+    options.text(STEREO.id).is_some_and(|method| method.trim().eq_ignore_ascii_case(SINGLE_PASS_STEREO.0))
+}
 
 /// FSR upscaling ([`EyeSettings::fsr`]): with frame warping, each eye drawn smaller and upscaled.
 pub const FSR: Opt = opt("fsr", "FSR upscaling", "Renders each eye smaller, then upscales it. Needs Dying Light 2's FidelityFX DLLs.", Kind::Switch { default: false })

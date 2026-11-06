@@ -15,6 +15,12 @@
 //! is the frame rate achieved ([`BEHIND`]): behind, the rate drops to what was achieved
 //! ([`CAP_MARGIN`]) and stays under it for [`BACKOFF`], doubled with each drop, before a higher
 //! rate is tried.
+//!
+//! On the headset's refresh the game thread's promise is not the whole story either: when the
+//! window's present holds the render thread (a swap blocked for most of a refresh), the game thread
+//! waits on it and promises no more than the refresh itself, though the frames keep up with it. A
+//! rate on the refresh whose frames are already achieved ([`achieved_step`]) is taken too, or the
+//! rate stays at 60, the frames are never paced, and the world moves 60 ticks over 90 frames.
 
 use crate::Wolf;
 use crate::providers::settings::{self, GameRate};
@@ -32,7 +38,7 @@ pub const FRAME_RATE: Opt = opt(
     "frame_rate",
     "Frame rate",
     "Frame rates above 60 may result in unstable or buggy gameplay.",
-    choice(&[("60", "60 (native)"), ("80", "80"), ("96", "96"), ("120", "120"), ("160", "160"), ("240", "240")], "60"),
+    choice(&[("60", "60 (native)"), ("80", "80"), ("90", "90"), ("96", "96"), ("120", "120"), ("160", "160"), ("240", "240")], "60"),
 )
 .on(Shown::Game);
 
@@ -51,8 +57,9 @@ pub const FRAME_RATE_COMPONENT: Component<Wolf> =
     };
 
 /// The rates the game may take: those whose whole-millisecond tick keeps the game's clock at its
-/// own 0.96 of real time (16 ms at 60, 4 ms at 240).
-pub const STEPS: [i32; 8] = [60, 64, 80, 96, 120, 160, 192, 240];
+/// own 0.96 of real time (16 ms at 60, 4 ms at 240), and 90 for 90 Hz headsets, whose 11 ms tick
+/// runs the clock at 0.99 (3% faster than the game's own; no rate near 90 keeps 0.96).
+pub const STEPS: [i32; 9] = [60, 64, 80, 90, 96, 120, 160, 192, 240];
 /// The game's own rate, and the lowest the rate goes.
 pub const OWN: i32 = 60;
 /// A rate is taken only with this much of a frame's time to spare.
@@ -63,6 +70,12 @@ pub const CAP_MARGIN: f64 = 0.97;
 /// in a row (one slow measure is a hitch: a load, a new upscaler, a shader).
 pub const BEHIND: f64 = 0.97;
 pub const BEHIND_WINDOWS: u32 = 2;
+/// Paced to the headset's refresh, a frame late misses a whole refresh: a hitch of two in a measure
+/// is already 4% behind, while a PC that cannot hold the rate misses most refreshes. So there the
+/// frames are behind only under this share, this many measures in a row (a 60 on a 90 Hz headset
+/// shows its frames for one refresh, then two: a judder worse than the hitches).
+pub const BEHIND_PACED: f64 = 0.85;
+pub const BEHIND_PACED_WINDOWS: u32 = 4;
 /// How long a measure runs, and how many in a row with room to spare before the rate rises.
 pub const WINDOW: Duration = Duration::from_millis(500);
 pub const RISE_WINDOWS: u32 = 4;
@@ -82,6 +95,12 @@ pub fn fitting(holds: f64, ceiling: i32) -> i32 {
 /// The highest step at most `ceiling` that `holds` frames a second keeps with [`CAP_MARGIN`].
 fn under_cap(holds: f64, ceiling: i32) -> i32 {
     STEPS.iter().copied().filter(|&step| step <= ceiling && f64::from(step) <= holds * CAP_MARGIN && paced(step)).max().unwrap_or(OWN).max(OWN)
+}
+
+/// The highest step at most `ceiling`, on the headset's refresh, whose frames `achieved` already
+/// keeps up with (as a measure not [`BEHIND`] it would); at least [`OWN`].
+pub fn achieved_step(achieved: f64, ceiling: i32) -> i32 {
+    STEPS.iter().copied().filter(|&step| step <= ceiling && f64::from(step) * BEHIND <= achieved && paced(step)).max().unwrap_or(OWN).max(OWN)
 }
 
 /// Whether `step` keeps the frames on the headset's refresh while they are paced to it (every step
@@ -111,10 +130,23 @@ impl Steps {
     /// The rate after a measure at `now`: the game thread's promise (`holds` frames a second), the
     /// frames `achieved` a second, up to `ceiling`.
     pub fn next(&mut self, holds: f64, achieved: f64, ceiling: i32, now: Instant) -> i32 {
+        self.step(holds, achieved, ceiling, now, crate::cooking::frame_pacing::headset_period().is_some())
+    }
+
+    /// [`Steps::next`], the frames paced to the headset's refresh or not (`on_grid`).
+    fn step(&mut self, holds: f64, achieved: f64, ceiling: i32, now: Instant, on_grid: bool) -> i32 {
+        // A rate off the headset's refresh (taken before the headset's timing came) is behind by
+        // its nature: straight to the best rate on it, nothing learnt.
+        if self.current != OWN && !paced(self.current) {
+            (self.rises, self.behind) = (0, 0);
+            self.current = fitting(holds, ceiling);
+            return self.current;
+        }
         // Behind at the game's own rate there is nowhere lower to go: nothing is learnt.
-        let behind = achieved < f64::from(self.current) * BEHIND && self.current > OWN;
+        let (share, windows) = if on_grid { (BEHIND_PACED, BEHIND_PACED_WINDOWS) } else { (BEHIND, BEHIND_WINDOWS) };
+        let behind = achieved < f64::from(self.current) * share && self.current > OWN;
         self.behind = if behind { self.behind + 1 } else { 0 };
-        if behind && self.behind < BEHIND_WINDOWS {
+        if behind && self.behind < windows {
             self.rises = 0;
             return self.current;
         }
@@ -131,6 +163,9 @@ impl Steps {
             return self.current;
         }
         let mut target = fitting(holds, ceiling);
+        if on_grid {
+            target = target.max(achieved_step(achieved, ceiling));
+        }
         if let Some((held, at, drops)) = self.cap {
             let wait = BACKOFF.saturating_mul(1 << (drops - 1).min(8)).min(BACKOFF_MAX);
             if now.saturating_duration_since(at) < wait {
@@ -177,11 +212,16 @@ static CHANGES: AtomicU64 = AtomicU64::new(0);
 const GIVE_BACK_MS: u64 = 1000;
 /// Rate changes logged at most.
 const LOGGED: u64 = 200;
+/// Measures leaving the rate as it was; one in [`HELD_EVERY`] logged while under the ceiling (every
+/// 10 s), at most [`HELD_LOGGED`] times.
+static HELD: AtomicU64 = AtomicU64::new(0);
+const HELD_EVERY: u64 = 20;
+const HELD_LOGGED: u64 = 30;
 
 /// The game's rate (ticks, and so frames, a second) at most while VR runs ([`FRAME_RATE`]; 60 is
 /// the game's own).
 pub(crate) fn ceiling(options: &monaka_core::options::Options) -> i32 {
-    options.choice("frame_rate", &[("80", 80), ("96", 96), ("120", 120), ("160", 160), ("240", 240)], 60)
+    options.choice("frame_rate", &[("80", 80), ("90", 90), ("96", 96), ("120", 120), ("160", 160), ("240", 240)], 60)
 }
 
 fn install(start: &mut Start<'_, Wolf>) -> Result<(), Lack> {
@@ -245,6 +285,10 @@ pub fn frame() {
     let before = adapt.steps;
     let rate = if crate::research::options().fixed_rate { adapt.ceiling } else { adapt.steps.next(holds, achieved, adapt.ceiling, now) };
     if rate == before.current {
+        let held = HELD.fetch_add(1, Relaxed);
+        if rate < adapt.ceiling && held % HELD_EVERY == 0 && held / HELD_EVERY < HELD_LOGGED {
+            log!("the game's rate stays {rate} ({achieved:.0} frames a second, the game thread promising {holds:.0})");
+        }
         return;
     }
     if !adapt.setting.write(&rate) {

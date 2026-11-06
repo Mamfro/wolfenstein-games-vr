@@ -15,6 +15,10 @@
 //! other rate (or with no refresh sent: an older viewer, the headset idle) the engine paces as
 //! before. Where in a refresh the finished pairs land is kept halfway between the viewer's wakes
 //! ([`Phase`]), so none lands on the edge of one and is taken a refresh early or late.
+//!
+//! SteamVR halves the refresh it reports while it reprojects (a 90 Hz headset said to be 45 Hz for a
+//! moment): the grid is the shortest refresh the headset has reported ([`steady`]), which those
+//! moments are whole multiples of, so neither the pacing nor the game's rate follow them.
 
 use crate::Wolf;
 use crate::providers::engine::FrameFn;
@@ -51,8 +55,18 @@ const STALE_NS: u64 = 100_000_000;
 const FITS: f64 = 0.005;
 /// How far the landing point moves toward halfway each pair (a share of how far off it is).
 const PHASE_GAIN: f64 = 0.05;
+/// The most a slot follows the grid in one frame (a share of a refresh): a wake's jitter is no
+/// reason to skip a refresh ([`next_slot`]).
+const FOLLOW: f64 = 0.125;
 /// The most refreshes a frame is held for.
 const MOST_REFRESHES: u64 = 4;
+/// The shortest refresh the headset has reported (nanoseconds; `u64::MAX`: none yet), and the
+/// shortest taken as one (a shorter report is not a headset's).
+static SHORTEST_NS: AtomicU64 = AtomicU64::new(u64::MAX);
+const SHORTEST_TAKEN_NS: u64 = 2_000_000;
+/// How often the pacing's tallies since the last are logged (nanoseconds), and how many times.
+const WINDOW_NS: u64 = 10_000_000_000;
+const WINDOWS_LOGGED: u64 = 60;
 
 /// The executable, `com_syncToTime` and the game's rate, from the install.
 static FACTS: OnceLock<(Module, &'static Cvar, GameRate)> = OnceLock::new();
@@ -83,15 +97,34 @@ fn quiet() {
     set_pacing(false);
 }
 
-/// The headset's refresh period (nanoseconds) while frames are paced to it.
-pub fn pacing_period() -> Option<u64> {
-    PACING.load(Acquire).then(|| STATE.locked().period).filter(|&p| p > 0)
+/// The headset's refresh period (nanoseconds) as the viewer last said it, while frames may be paced
+/// to it (whether or not the game's rate lets them be yet).
+pub fn headset_period() -> Option<u64> {
+    let timing = crate::on(FRAME_PACING_AT).then(|| PAIRS.head().display()).flatten()?;
+    (now_ns().saturating_sub(timing.woke_ns) < STALE_NS && timing.period_ns > 0).then(|| steady(timing).period_ns)
 }
 
-/// Whether the game's rate `hz` keeps frames on the refresh while they are paced (any rate when
-/// they are not): the frame rate takes only such rates.
+/// `timing` on the headset's own refresh: the shortest it has reported, not a reprojecting
+/// SteamVR's multiple of it.
+fn steady(timing: DisplayTiming) -> DisplayTiming {
+    let period = timing.period_ns;
+    if period < SHORTEST_TAKEN_NS {
+        return timing;
+    }
+    let shortest = SHORTEST_NS.fetch_min(period, Relaxed).min(period);
+    DisplayTiming { period_ns: shortest, ..timing }
+}
+
+/// Whether the game's rate `hz` keeps frames on the headset's refresh (any rate when they cannot be
+/// paced): the frame rate takes only such rates. Pacing starts only at such a rate, so this asks the
+/// headset, not the pacing (96 on a 90 Hz headset is never paced, and shows 90 of its frames).
 pub fn allows(hz: i32) -> bool {
-    pacing_period().is_none_or(|period| refreshes_per_frame(period, hz).is_some())
+    headset_period().is_none_or(|period| refreshes_per_frame(period, hz).is_some())
+}
+
+/// Whether frames start on the headset's grid now (the game in play; not in its menus).
+pub fn pacing() -> bool {
+    PACING.load(Acquire)
 }
 
 /// How long the last frame waited for its slot (microseconds), taken once.
@@ -123,9 +156,14 @@ fn wrapped(value: i64, period: u64) -> i64 {
 }
 
 /// The slot the next frame starts at on the headset's grid (`timing`, its points moved by
-/// `phase`): the grid point nearest `refreshes` refreshes after the `last` slot; or, when that is
-/// past `now` by half a refresh or more (or there is no last slot), the first point from `now` on.
-/// Whether it came late (the frame before ran over).
+/// `phase`): `refreshes` refreshes after the `last` slot, drawn toward the grid by at most
+/// [`FOLLOW`] of a refresh; or, when that is past `now` by half a refresh or more (or there is no
+/// last slot), the first point from `now` on. Whether it came late (the frame before ran over).
+///
+/// The grid is anchored on the viewer's latest wake, which jitters (more so while SteamVR
+/// reprojects): snapped to the nearest grid point, a wake late by half a refresh put the slot a
+/// whole refresh further on, and that frame was shown twice without being counted late. Followed
+/// a little a frame, the slot keeps the headset's beat and still settles onto a grid that slid.
 pub fn next_slot(timing: &DisplayTiming, phase: u64, last: Option<u64>, refreshes: u64, now: u64) -> (u64, bool) {
     let period = timing.period_ns;
     let origin = timing.woke_ns + phase % period;
@@ -135,12 +173,13 @@ pub fn next_slot(timing: &DisplayTiming, phase: u64, last: Option<u64>, refreshe
     };
     let Some(last) = last else { return (point_at_or_after(now), false) };
     let wanted = last + refreshes * period;
-    // The grid point nearest the slot wanted (the grid may have slid a little against it).
-    let nearest = point_at_or_after(wanted.saturating_sub(period / 2));
-    if nearest + period / 2 <= now {
+    let off = wrapped(wanted as i64 - origin as i64, period);
+    let most = (period as f64 * FOLLOW) as i64;
+    let slot = (wanted as i64 - off.clamp(-most, most)) as u64;
+    if slot + period / 2 <= now {
         return (point_at_or_after(now), true);
     }
-    (nearest, false)
+    (slot, false)
 }
 
 /// Where the paced frames' pairs land: an offset of the grid's points, moved each pair so its
@@ -179,11 +218,38 @@ struct State {
     off_sum_us: u64,
     off_worst_us: u64,
     began: u64,
+    /// The window logged every [`WINDOW_NS`]: since when, and its tallies.
+    window: Window,
+    windows_logged: u64,
+    /// When the last frame started after its wait (nanoseconds; 0: none).
+    last_started: u64,
+}
+
+/// The pacing's tallies over one logged window.
+#[derive(Clone, Copy)]
+struct Window {
+    since: u64,
+    frames: u64,
+    late: u64,
+    missed_slot: u64,
+    worst_us: u64,
+    /// The game thread's longest frame, its wait for the slot left out (microseconds).
+    work_worst_us: u64,
+    /// Frames whose own work took longer than a refresh.
+    work_over: u64,
+    /// Slots more than half a refresh past their turn (a refresh with no new frame).
+    skipped: u64,
+}
+
+impl Window {
+    const fn new(since: u64) -> Self {
+        Self { since, frames: 0, late: 0, missed_slot: 0, worst_us: 0, work_worst_us: 0, work_over: 0, skipped: 0 }
+    }
 }
 
 impl State {
     const fn new() -> Self {
-        Self { period: 0, phase: 0, last: None, refreshes: 0, frames: 0, late: 0, missed_slot: 0, worst_us: 0, landed: 0, off_sum_us: 0, off_worst_us: 0, began: 0 }
+        Self { period: 0, phase: 0, last: None, refreshes: 0, frames: 0, late: 0, missed_slot: 0, worst_us: 0, landed: 0, off_sum_us: 0, off_worst_us: 0, began: 0, window: Window::new(0), windows_logged: 0, last_started: 0 }
     }
 }
 
@@ -196,7 +262,14 @@ fn set_pacing(pacing: bool) {
         cvar.set_int(exe, i32::from(!pacing));
     }
     let mut state = STATE.locked();
+    // The paced stretch's tallies, however short, then a fresh window for the next.
+    if !pacing {
+        let (now, period) = (now_ns(), state.period);
+        log_window(&mut state, now, period, true);
+        state.window = Window::new(0);
+    }
     state.last = None;
+    state.last_started = 0;
     PUBLISHED.store(0, Relaxed);
     if state.began < 20 {
         state.began += 1;
@@ -208,7 +281,7 @@ fn set_pacing(pacing: bool) {
 }
 
 /// Waits (sleeping, then spinning the last stretch) until `slot` on the performance counter.
-fn wait_until(slot: u64) {
+pub(crate) fn wait_until(slot: u64) {
     loop {
         let now = now_ns();
         if now >= slot {
@@ -229,9 +302,10 @@ fn pace() {
     let Some((_, _, rate)) = FACTS.get() else { return };
     let timing = crate::on(FRAME_PACING_AT).then(|| PAIRS.head().display()).flatten();
     let now = now_ns();
-    let fresh = timing.filter(|t| now.saturating_sub(t.woke_ns) < STALE_NS);
+    let fresh = timing.filter(|t| now.saturating_sub(t.woke_ns) < STALE_NS && t.period_ns > 0).map(steady);
     let refreshes = fresh.zip(rate.read()).and_then(|(t, hz)| refreshes_per_frame(t.period_ns, hz));
-    let (Some(timing), Some(refreshes)) = (fresh, refreshes) else {
+    // A menu runs on the engine's own clock: held to the headset's grid, it answers seconds late.
+    let (Some(timing), Some(refreshes), false) = (fresh, refreshes, crate::providers::eye_site::in_menu()) else {
         set_pacing(false);
         return;
     };
@@ -253,9 +327,24 @@ fn pace() {
     let (slot, late) = next_slot(&timing, state.phase, state.last, refreshes, now);
     if late {
         state.late += 1;
+        state.window.late += 1;
+    }
+    if let Some(last) = state.last
+        && slot > last + refreshes * timing.period_ns + timing.period_ns / 2
+    {
+        state.window.skipped += 1;
+    }
+    // The frame before's own work: from its start to now.
+    if state.last_started != 0 && state.last.is_some() {
+        let work_us = now.saturating_sub(state.last_started) / 1000;
+        monaka_producer::debug::frame_work(std::time::Duration::from_micros(work_us));
+        state.window.work_worst_us = state.window.work_worst_us.max(work_us);
+        state.window.work_over += u64::from(work_us * 1000 > timing.period_ns);
     }
     state.last = Some(slot);
     state.frames += 1;
+    state.window.frames += 1;
+    log_window(&mut state, now, timing.period_ns, false);
     drop(state);
     // A slot further off than a frame's refreshes is not this grid's: no wait.
     if slot > now && slot - now <= (refreshes + 1) * timing.period_ns {
@@ -267,8 +356,42 @@ fn pace() {
     let mut state = STATE.locked();
     if off_slot > 100 {
         state.missed_slot += 1;
+        state.window.missed_slot += 1;
     }
     state.worst_us = state.worst_us.max(off_slot);
+    state.window.worst_us = state.window.worst_us.max(off_slot);
+    state.last_started = started;
+}
+
+/// Every [`WINDOW_NS`] (or at once when `ending`, the pacing stopping), the window's tallies
+/// logged and started afresh.
+fn log_window(state: &mut State, now: u64, period: u64, ending: bool) {
+    if state.window.since == 0 {
+        if !ending {
+            state.window = Window::new(now);
+        }
+        return;
+    }
+    if now.saturating_sub(state.window.since) < WINDOW_NS && !(ending && state.window.frames > 0) {
+        return;
+    }
+    let w = state.window;
+    let seconds = now.saturating_sub(w.since) as f64 / 1e9;
+    if state.windows_logged < WINDOWS_LOGGED {
+        state.windows_logged += 1;
+        log!(
+            "frame pacing over {seconds:.0} s: {:.1} frames a second on a {:.1} Hz grid; {} refreshes skipped, {} late, {} over 0.1 ms off their slot (the most {} us); the game thread's own work over a refresh {} times, at most {:.2} ms",
+            w.frames as f64 / seconds,
+            1e9 / period.max(1) as f64,
+            w.skipped,
+            w.late,
+            w.missed_slot,
+            w.worst_us,
+            w.work_over,
+            w.work_worst_us as f64 / 1000.0,
+        );
+    }
+    state.window = Window::new(now);
 }
 
 unsafe extern "system" fn frame(common: usize) -> usize {

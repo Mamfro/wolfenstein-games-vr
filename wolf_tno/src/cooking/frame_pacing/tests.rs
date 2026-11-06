@@ -36,6 +36,19 @@ fn a_grid_that_slid_a_little_is_followed() {
 }
 
 #[test]
+fn a_late_wake_does_not_skip_a_refresh() {
+    // The viewer's latest wake came 4.5 ms late (over half a refresh): the slot stays on the beat,
+    // drawn toward that grid by an eighth of a refresh at most.
+    let last = 1_000_000_000;
+    for late in [4_500_000, P - 4_500_000] {
+        let timing = grid(last + P + late);
+        let (slot, skipped) = next_slot(&timing, 0, Some(last), 2, last + P);
+        assert!(!skipped);
+        assert!(slot.abs_diff(last + 2 * P) <= P / 8, "{late}: {}", slot as i64 - (last + 2 * P) as i64);
+    }
+}
+
+#[test]
 fn a_frame_that_ran_over_starts_on_the_next_point() {
     let last = 1_000_000_000;
     let timing = grid(last);
@@ -58,4 +71,12 @@ fn pairs_are_moved_toward_halfway_between_wakes() {
     assert!(moved > 100_000 && moved < 400_000, "{moved}");
     // Halfway: nothing moves.
     assert_eq!(Phase::after(&timing, 500, 1_000_000_000 + P / 2), 500);
+}
+
+#[test]
+fn a_reprojecting_steamvrs_half_rate_keeps_the_headsets_grid() {
+    let at = |period_ns| DisplayTiming { period_ns, woke_ns: 5 };
+    assert_eq!(steady(at(11_111_111)).period_ns, 11_111_111);
+    assert_eq!(steady(at(22_222_222)), at(11_111_111), "45 Hz reported: still 90's grid");
+    assert_eq!(steady(at(11_111_111)).period_ns, 11_111_111);
 }

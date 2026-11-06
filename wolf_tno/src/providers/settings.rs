@@ -26,15 +26,19 @@ use monaka_producer::ledger::Setting;
 /// [`DISABLE_VIEW_BOBBING`] takes the bob.
 pub const DISABLE_SCREEN_SHAKE: Opt = opt("disable_screen_shake", "Disable screen shake", "", Kind::Switch { default: false }).on(Shown::Game);
 
+/// The blur over the screen when the player is hit ([`no_screen_blur`] without it).
+pub const DAMAGE_BLUR: Opt = opt("damage_blur", "Damage blur", "Blurs the screen when you're hit. The game only gets it right in one eye.", Kind::Switch { default: false }).on(Shown::Game);
+
 /// What the game needs set while VR runs: it keeps playing without focus (the viewer, SteamVR or a
-/// PC check have it), its view bob goes (Monaka's own setting), and its screen shake when the
-/// player says ([`DISABLE_SCREEN_SHAKE`]).
+/// PC check have it), its view bob goes (Monaka's own setting), and its screen shake and damage blur
+/// when the player says ([`DISABLE_SCREEN_SHAKE`], [`DAMAGE_BLUR`]).
 pub const SETTINGS: Component<Wolf> = Component {
     name: "settings",
-    options: &[DISABLE_VIEW_BOBBING, DISABLE_SCREEN_SHAKE],
+    options: &[DISABLE_VIEW_BOBBING, DISABLE_SCREEN_SHAKE, DAMAGE_BLUR],
     settings: |options, manifest| {
         no_view_bob(options, manifest);
         options.switch(DISABLE_SCREEN_SHAKE.id, false);
+        options.switch(DAMAGE_BLUR.id, false);
     },
     install: install_settings,
     ..Component::NONE
@@ -55,7 +59,14 @@ fn install_settings(start: &mut Start<'_, Wolf>) -> Result<(), Lack> {
     if start.options.switch(DISABLE_SCREEN_SHAKE.id, false) {
         no_screen_shake(start.ledger, &exe, build);
     }
+    if !start.options.switch(DAMAGE_BLUR.id, false) {
+        no_screen_blur(start.ledger, &exe, build);
+    }
+    log_streaming(&exe);
+    gpu_decoding(start.ledger, &exe);
+    hold_unique(start.ledger, &exe);
     crate::research::cvars::apply(start.ledger, &exe);
+    crate::research::cvars::prepare_cycle(start.ledger, &exe);
     // Kept at 0 by the ledger (what it holds at the stop goes back), so the world never stays
     // frozen after VR.
     if build.stop_time.present(&exe) && build.stop_time.set_int(&exe, 0) && start.ledger.keep(eng_idt::IntCvar { exe, cvar: &build.stop_time }).is_some() {
@@ -63,6 +74,114 @@ fn install_settings(start: &mut Start<'_, Wolf>) -> Result<(), Lack> {
         monaka_producer::debug::offer(Category::FreezeWorld);
     }
     Ok(())
+}
+
+/// The game's texture streaming settings, as the run starts (read only): with the streaming
+/// lines of [`crate::single_pass::uploads`], what a hitch was made of and what to turn.
+const STREAMING: &[&str] = &[
+    "vt_maxPPF",
+    "vt_pageImageSizeVmtr",
+    "vt_pageImageSizeUnique",
+    "vt_pageImageSizeUniqueDiffuseOnly",
+    "vt_uncompressedPhysicalImages",
+    "vt_useCudaTranscode",
+    "vt_useTranscodeJobs",
+    "vt_splitTranscodeJobs",
+    "vt_usePageFileCache",
+    "vt_usePageTablePBOs",
+    "vt_useUnsynchronizedPageTablePBOs",
+    "vt_feedbackLodBias",
+    "vt_feedbackHighWater",
+    "vt_feedbackLowWater",
+    "vt_lodBias",
+    "vt_maxAniso",
+    "vt_pageFadeInSteps",
+    "r_usePBOTextureFeedback",
+    "jobs_numThreads",
+];
+
+fn log_streaming(exe: &Module) {
+    let found: Vec<(&'static str, &'static Cvar)> = STREAMING.iter().filter_map(|&name| Some((name, Cvar::find(exe, name, eng_idt::Layout::ID_TECH_5)?))).collect();
+    let values: Vec<String> = found.iter().filter_map(|(name, cvar)| Some(format!("{name} {} ({})", cvar.int(exe)?, cvar.float(exe)?))).collect();
+    log!("texture streaming settings: {}", values.join(", "));
+    let seen = found.iter().map(|(_, c)| c.int(exe)).collect();
+    let _ = WATCHED.set(Watched { exe: *exe, found, seen: std::sync::Mutex::new(seen) });
+}
+
+/// The streaming settings as last seen, for [`watch_streaming`].
+struct Watched {
+    exe: Module,
+    found: Vec<(&'static str, &'static Cvar)>,
+    seen: std::sync::Mutex<Vec<Option<i32>>>,
+}
+
+static WATCHED: OnceLock<Watched> = OnceLock::new();
+/// `vt_useCudaTranscode`, held on ([`gpu_decoding`]).
+static GPU_DECODING: OnceLock<(Module, &'static Cvar)> = OnceLock::new();
+static WATCH_FRAMES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The texture pages decoded on the GPU (`vt_useCudaTranscode` 1, the game's own CUDA decoder)
+/// rather than on the CPU's job threads: the work that grows with the streaming settings raised
+/// moves off the CPU. The game's options menu writes it back to 0 whenever its video settings are
+/// applied, so it is held on ([`watch_streaming`]); the ledger puts the game's own back at the stop.
+fn gpu_decoding(ledger: &mut monaka_producer::ledger::Ledger, exe: &Module) {
+    let Some(cvar) = Cvar::find(exe, "vt_useCudaTranscode", eng_idt::Layout::ID_TECH_5) else { return };
+    eng_idt::set_int(ledger, exe, cvar, 1, "texture pages are decoded on the CPU");
+    let _ = GPU_DECODING.set((*exe, cvar));
+    log!("texture streaming: pages decoded on the GPU (vt_useCudaTranscode 1), held on while VR runs");
+}
+
+/// The largest `vt_pageImageSizeUnique` (the unique texture cache image) let through, or none.
+/// The game's texture cache on high (Vmtr 4096, Unique 8192) throttled the headset a minute into
+/// every run; Vmtr held at 2048 with Unique 8192 did the same, while Vmtr 4096 with Unique 4096 held
+/// 90. That was the viewer's copy waiting behind the game's GPU work with Windows' hardware GPU
+/// scheduling off; with it on, high and ultra held 90, so nothing is held (`Some(size)` holds again).
+const UNIQUE_MOST: Option<i32> = None;
+/// `vt_pageImageSizeUnique`, held at [`UNIQUE_MOST`] at most.
+static UNIQUE: OnceLock<(Module, &'static Cvar, i32)> = OnceLock::new();
+
+fn hold_unique(ledger: &mut monaka_producer::ledger::Ledger, exe: &Module) {
+    let Some(most) = UNIQUE_MOST else { return };
+    let Some(cvar) = Cvar::find(exe, "vt_pageImageSizeUnique", eng_idt::Layout::ID_TECH_5) else { return };
+    let _ = UNIQUE.set((*exe, cvar, most));
+    let game = cvar.int(exe);
+    if game.is_some_and(|v| v > most) {
+        eng_idt::set_int(ledger, exe, cvar, most, "the unique texture cache image is the game's size");
+        log!("texture streaming: vt_pageImageSizeUnique held at {most} (the game's {}), vt_pageImageSizeVmtr left as the game has it", game.unwrap_or(0));
+    }
+}
+
+/// On the render thread, every 45th frame: a streaming setting changed (the options menu) is logged,
+/// and GPU decoding turned off is turned on again before the engine rebuilds its texture cache.
+pub fn watch_streaming() {
+    if WATCH_FRAMES.fetch_add(1, Relaxed) % 45 != 0 {
+        return;
+    }
+    if let Some((exe, cvar)) = GPU_DECODING.get()
+        && cvar.int(exe) == Some(0)
+    {
+        cvar.set_int(exe, 1);
+        log!("texture streaming: the game turned GPU decoding off (vt_useCudaTranscode 0); on again");
+    }
+    if let Some((exe, cvar, most)) = UNIQUE.get()
+        && cvar.int(exe).is_some_and(|v| v > *most)
+    {
+        cvar.set_int(exe, *most);
+        log!("texture streaming: the game set vt_pageImageSizeUnique above {most}; held at {most} again");
+    }
+    let Some(w) = WATCHED.get() else { return };
+    let Ok(mut seen) = w.seen.lock() else { return };
+    let mut changed = Vec::new();
+    for ((name, cvar), last) in w.found.iter().zip(seen.iter_mut()) {
+        let now = cvar.int(&w.exe);
+        if now != *last {
+            changed.push(format!("{name} {} -> {}", last.map_or("?".to_owned(), |v| v.to_string()), now.map_or("?".to_owned(), |v| v.to_string())));
+            *last = now;
+        }
+    }
+    if !changed.is_empty() {
+        log!("texture streaming settings changed: {}", changed.join(", "));
+    }
 }
 
 /// What shakes the view, each set to 0 while the screen shake is off: the camera shakes
@@ -92,6 +211,30 @@ fn no_screen_shake(ledger: &mut monaka_producer::ledger::Ledger, exe: &Module, b
             eng_idt::set_float(ledger, exe, cvar, 0.0, "the view shakes");
         } else {
             eng_idt::set_int(ledger, exe, cvar, 0, "the view shakes");
+        }
+    }
+}
+
+/// The blurs laid over the whole screen when the player is hit (the damage blur and its
+/// amplitudes), each 0 while VR runs: a flat image's smear, not the same in the two eyes (each eye
+/// drawn on its own, or one warped from the other), and a blurred frame upscaled and warped turns
+/// to noise. The game has no camera motion blur to turn off.
+const BLURS: &[(&str, bool)] = &[("view_damageBlur", false), ("view_blur_min", true), ("view_blur_max", true)];
+
+/// The screen blurs off ([`BLURS`]), found in the running game as the shakes are; one the game
+/// does not have is left out.
+fn no_screen_blur(ledger: &mut monaka_producer::ledger::Ledger, exe: &Module, build: &engine::Build) {
+    if let Some(bob) = Cvar::find(exe, build.no_bob.name, eng_idt::Layout::ID_TECH_5)
+        && bob.name_pointer != build.no_bob.name_pointer
+    {
+        return;
+    }
+    for &(name, float) in BLURS {
+        let Some(cvar) = Cvar::find(exe, name, eng_idt::Layout::ID_TECH_5) else { continue };
+        if float {
+            eng_idt::set_float(ledger, exe, cvar, 0.0, "the screen blurs when the player is hit");
+        } else {
+            eng_idt::set_int(ledger, exe, cvar, 0, "the screen blurs when the player is hit");
         }
     }
 }

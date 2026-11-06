@@ -108,6 +108,13 @@ pub fn controlled() -> bool {
     (CONTROLLED.load(Acquire) || SPRING.load(Acquire)) && fresh()
 }
 
+/// Whether a control camera rewrites the view now (a grab: a latch cut, a takedown): the game
+/// builds it from the player's angles, so the head's share must be out of them for the head to
+/// look around it once.
+pub fn grabbed() -> bool {
+    SPRING.load(Acquire) && fresh()
+}
+
 /// Whether `handle` names a live entity, checked as the game checks it ([`Entities`]).
 fn live_entity(base: usize, entities: &Entities, handle: u32) -> bool {
     let mask = (1u32 << entities.bits) - 1;
@@ -206,6 +213,11 @@ pub fn game_player() -> Option<(usize, usize)> {
 /// Whether that camera is a mounted gun or a machine the player drives.
 pub fn mounted() -> bool {
     (MOUNTED.load(Acquire) || DRIVING.load(Acquire)) && fresh()
+}
+
+/// Whether that camera is a mounted gun (not a machine the player drives).
+pub fn on_mounted_gun() -> bool {
+    MOUNTED.load(Acquire) && fresh()
 }
 
 /// Whether the look keeps the head's share in the angles as it was: on a mounted gun ([`mounted`]),

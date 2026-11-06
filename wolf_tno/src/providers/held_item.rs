@@ -45,6 +45,20 @@ pub fn held(side: usize) -> Kind {
     HELD.lock().map_or(Kind::Gun, |held| held[side.min(1)])
 }
 
+/// Whether the item named `name` is a gun, of those [`right_kind`] does not call melee: not a grenade
+/// or something carried (a tea tray, a person).
+fn is_gun(name: &str) -> bool {
+    !name.contains("grenade") && !name.starts_with("weapon/specialweapon/")
+}
+
+/// Tells the viewer which hands' reticles show, for its Game Based reticles: those holding a gun.
+/// The left hand only with one of its own (`dual`), not steadying the right one's.
+pub fn say_reticles(layout: &HandsLayout, hands: usize, dual: bool) {
+    let gun = right_kind(layout, hands) == Kind::Gun && with_right_name(layout, hands, |name| name.is_some_and(is_gun));
+    monaka_body::controllers::show_reticle(LEFT_HAND, dual);
+    monaka_body::controllers::show_reticle(RIGHT_HAND, gun);
+}
+
 /// The guns' barrels: along each gun's forward axis from its origin (no muzzle length known).
 impl HeldItems for Wolf {
     type Model = NoModel;

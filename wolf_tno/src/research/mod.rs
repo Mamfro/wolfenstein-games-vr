@@ -19,6 +19,7 @@ pub mod hud_sprites;
 pub mod melee;
 pub mod panels;
 pub mod profile;
+pub mod shaders;
 pub mod view;
 
 use monaka_producer::research::Research;
@@ -47,6 +48,8 @@ pub struct Options {
     pub freeze_at: f32,
     /// `probe_cvars=<name>@<rva>=<value>,...`: integer cvars set for the run ([`cvars`]).
     pub cvars: String,
+    /// `probe_cycle=<name>=<value>[+...],...`: candidates tried in turn in play ([`cvars::prepare_cycle`]).
+    pub cycle: String,
     /// `probe_extra_yaw=<degrees>`: the eyes' views turned this much more (left positive) as they
     /// are written: whether the world is drawn from them or from the game camera.
     pub extra_yaw: f32,
@@ -57,6 +60,9 @@ pub struct Options {
     pub cutting: bool,
     /// `probe_hud_sprites`: log where each of the HUD movie's sprites first draws ([`hud_sprites`]).
     pub hud_sprites: bool,
+    /// `probe_shaders`: write every shader the game gave the driver beside the run's log
+    /// ([`shaders`]).
+    pub shaders: bool,
     /// `probe_player`: log The Old Blood's player fields that can hand the view to something else
     /// ([`view::player`]).
     pub player: bool,
@@ -74,11 +80,13 @@ impl Options {
             fixed_rate: options.switch("probe_fixed_rate", false),
             freeze_at: options.number("probe_freeze_at", 0.0, 3600.0, 0.0),
             cvars: options.text("probe_cvars").unwrap_or_default().to_owned(),
+            cycle: options.text("probe_cycle").unwrap_or_default().to_owned(),
             extra_yaw: options.number("probe_extra_yaw", -90.0, 90.0, 0.0),
             items_on_view: options.switch("probe_items_on_view", false),
             cutting: options.switch("probe_cutting", false),
             hud_sprites: options.switch("probe_hud_sprites", false),
             player: options.switch("probe_player", false),
+            shaders: options.switch("probe_shaders", false),
         }
     }
 }

@@ -95,3 +95,13 @@ fn a_turn_between_two_directions_takes_one_onto_the_other() {
     }
     assert!(turn_between([0.0; 3], [1.0, 0.0, 0.0]).is_none());
 }
+
+#[test]
+fn guns_are_told_from_what_else_a_hand_holds() {
+    for gun in ["weapon/assaultrifle1960", "weapon/shotgun", "weapon/mg60", "weapon/handgun", "weapon/ar60marksman", "weapon/laserkraftwerk", "weapon/lasercutter"] { // monaka-lint: allow
+        assert!(is_gun(gun), "{gun}");
+    }
+    for item in ["weapon/handgrenadeemp", "weapon/specialweapon/teatray", "weapon/specialweapon/carrybodycaroline"] {
+        assert!(!is_gun(item), "{item}");
+    }
+}

@@ -1,15 +1,17 @@
 //! Cooking, waiting for a Monaka ready-made for the run's heading (part of the look): the left
-//! stick halfway between the head's heading and the body's, or (`body_turn`) on a body that turns
-//! with the player.
+//! stick on the head's heading, the body's, or halfway between ([`MOVE_HEADING`]), the body's
+//! turning with the player (`body_turn`).
 //!
 //! With head aim the game camera carries the head's yaw (`monaka_body::look`'s share in the
 //! command angles), and the game moves the player relative to its camera: the run goes where the
 //! head looks. Fully on the body's heading (the right stick's turn) a glance aside felt like
-//! moving sideways; fully on the head's, it steered the run. Before the game reads the pad, the
-//! left stick is turned back by [`HEAD_SHARE_OUT`] of the head's share: the run goes halfway
-//! between. The view, the aim and the shots stay the head's.
+//! moving sideways; fully on the head's, the head steers the run, which is what physical turning
+//! needs (as KF2VR's head-relative movement, its default). Before the game reads the pad, the
+//! left stick is turned back by the chosen share of the head's turn ([`head_share_out`]). The
+//! view, the aim and the shots stay the head's.
 //!
-//! With `body_turn` ([`BODY_TURN`]) the player turning in the room turns the body: a heading of
+//! Off the head's heading, with `body_turn` ([`BODY_TURN`]) the player turning in the room turns
+//! the body: a heading of
 //! the mod's own follows the head's ([`Body`]), never more than [`DEAD_ZONE`] behind and settling
 //! onto it over [`SETTLE_SECONDS`], so a glance aside barely steers but a real turn does, and the
 //! left stick is turned onto that heading. The right stick still turns the body as before.
@@ -22,17 +24,60 @@ use crate::Wolf;
 use crate::providers::camera_taken;
 use monaka_body::look;
 use monaka_contract::gamepad::Gamepad;
-use monaka_contract::manifest::{Kind, Opt, Shown, opt};
+use monaka_contract::manifest::{Kind, Opt, Shown, choice, opt};
+use monaka_core::options::Options;
 use monaka_core::pad::{StickTurn, TurnLatch};
 use monaka_core::sync::Locked;
+use monaka_producer::game::{Component, Lack, Start};
 use std::f32::consts::{PI, TAU};
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering::*};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::*};
 use std::time::Instant;
 
-/// How much of the head's turn is taken out of the run's heading (0: where the head looks, 1:
-/// where the body faces).
-pub const HEAD_SHARE_OUT: f32 = 0.5;
+/// Where the left stick moves the player (`move_heading`): where the body faces (the default, only
+/// the right stick steers), halfway, or where the head looks (physical turns steer; experimental,
+/// offered in developer mode only).
+pub const MOVE_HEADING: Opt = opt(
+    "move_heading",
+    "Movement direction",
+    "Body: only the right stick turns. Halfway: between where you look and where the body faces.",
+    choice(&[("head", "Head, experimental"), ("halfway", "Halfway"), ("body", "Body")], "body"),
+)
+.on(Shown::Controls)
+.turns_off("head", BODY_TURN.id, "Movement follows your head already; room-scale movement is its own setting.");
+
+/// The run's heading as `move_heading` asks, read as the run starts.
+pub const MOVE_HEADING_COMPONENT: Component<Wolf> = Component {
+    name: "move heading",
+    options: &[MOVE_HEADING],
+    settings: |options, _| {
+        share_out(options);
+    },
+    install,
+    ..Component::NONE
+};
+
+/// The shares of the head's turn taken out of the run's heading, by `move_heading` id.
+const SHARES: [(&str, f32); 3] = [("head", 0.0), ("halfway", 0.5), ("body", 1.0)];
+
+/// The run's share taken out, as `f32` bits (0.0 until read: the head's heading).
+static SHARE_OUT: AtomicU32 = AtomicU32::new(0);
+
+fn install(start: &mut Start<'_, Wolf>) -> Result<(), Lack> {
+    SHARE_OUT.store(share_out(start.options).to_bits(), Relaxed);
+    Ok(())
+}
+
+/// How much of the head's turn `options` take out of the run's heading (0: where the head looks,
+/// 1: where the body faces).
+pub fn share_out(options: &Options) -> f32 {
+    options.choice("move_heading", &SHARES, 1.0)
+}
+
+/// The run's share taken out ([`MOVE_HEADING_COMPONENT`]).
+pub fn head_share_out() -> f32 {
+    f32::from_bits(SHARE_OUT.load(Relaxed))
+}
 
 /// The body turning with the player (the left stick walking where they face, not halfway to where
 /// the right stick last turned them).
@@ -93,6 +138,10 @@ pub fn take_snapped() -> f32 {
 /// while it would only zoom (`cooking::sights`), and Y held opening the journal
 /// (`cooking::journal`).
 pub fn pad(pad: &mut Gamepad) {
+    if crate::providers::eye_site::in_menu() {
+        menu_stick(pad);
+        return;
+    }
     crate::cooking::sights::no_zoom(pad);
     crate::cooking::journal::pad(pad);
     // The knife's throw reads the trigger before the swings let go of it.
@@ -100,19 +149,57 @@ pub fn pad(pad: &mut Gamepad) {
     crate::providers::melee::let_go_of_trigger(pad);
     snap(pad);
     let share = look::baked::<Wolf>(None);
-    let out = match (TURNS.load(Relaxed), share) {
-        (true, Some(share)) => Some(BODY.locked().follow(share.yaw, Instant::now())),
-        (true, None) => {
+    let share_out = head_share_out();
+    let out = match (share_out == 0.0, TURNS.load(Relaxed), share) {
+        // On the head's heading: as pushed (the head steers, physical turns with it).
+        (true, ..) => None,
+        (false, true, Some(share)) => Some(BODY.locked().follow(share.yaw, Instant::now())),
+        (false, true, None) => {
             // Not looking by the head (a cutscene, another camera): the body starts again from
             // where the head faces.
             BODY.locked().reset();
             None
         }
-        (false, share) => share.map(|share| share.yaw * HEAD_SHARE_OUT),
+        (false, false, share) => share.map(|share| share.yaw * share_out),
     };
     if let Some(out) = out {
         (pad.thumb_lx, pad.thumb_ly) = turned_stick(pad.thumb_lx, pad.thumb_ly, out);
     }
+    // Last, on the game camera's own heading: room-scale following's push.
+    crate::cooking::room_scale::pad(pad);
+}
+
+/// A stick past this share of its range is a menu step, held until it is back under
+/// [`MENU_REST`] (a light push steps as on a pad; the stick's noise at the edge does not).
+const MENU_STEP: f32 = 0.35;
+const MENU_REST: f32 = 0.2;
+
+/// In a menu: the left stick as a steady step along its main axis, full or centred. The VR stick's
+/// own noise and the pad's dither change the state every few reads, and the menu takes a changing
+/// stick as a push that has not settled, stepping seconds late.
+fn menu_stick(pad: &mut Gamepad) {
+    static LOGGED: AtomicU32 = AtomicU32::new(0);
+    static LAST: Mutex<(i16, i16)> = Mutex::new((0, 0));
+    let mut last = LAST.locked();
+    let step = menu_step(pad.thumb_lx, pad.thumb_ly, *last != (0, 0));
+    (pad.thumb_lx, pad.thumb_ly) = step;
+    if *last != step {
+        if LOGGED.fetch_add(1, Relaxed) < 200 {
+            monaka_producer::log!("menu stick: {:?} -> {:?} handed to the game", *last, step);
+        }
+        *last = step;
+    }
+}
+
+/// The step a left stick at `x`, `y` is in a menu: its main axis at full, past [`MENU_STEP`]
+/// (past [`MENU_REST`] while a step is `held`).
+pub fn menu_step(x: i16, y: i16, held: bool) -> (i16, i16) {
+    let (fx, fy) = (f32::from(x) / 32767.0, f32::from(y) / 32767.0);
+    if fx.hypot(fy) < if held { MENU_REST } else { MENU_STEP } {
+        return (0, 0);
+    }
+    let full = |v: f32| if v < 0.0 { -32767 } else { 32767 };
+    if fx.abs() > fy.abs() { (full(fx), 0) } else { (0, full(fy)) }
 }
 
 /// The body's heading of its own, in tracking space (radians, positive left, as the head's share).

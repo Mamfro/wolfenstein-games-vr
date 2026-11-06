@@ -11,24 +11,27 @@ use monaka_hook::{Instruction, Site, mem};
 /// A screen layout's first view record (rva) and the name its header carries.
 pub type Layout = (usize, &'static str);
 
-/// The window the game renders into: the cvars `vid_restart` sizes it from, and the command
-/// system that runs it. Windowed (`r_fullscreen` 0), the engine renders at `r_windowWidth` x
-/// `r_windowHeight` (their integer values, read directly) and clamps the window itself to its
-/// monitor; full screen, at the monitor's or the mode's size.
+/// The window the game renders into: the cvars `vid_restart` sizes it from, and the render system
+/// that runs it. Windowed (`r_fullscreen` 0), the engine renders at its window's client size and
+/// follows its resizes (`r_windowWidth` and `r_windowHeight` track `WM_SIZE`; their integer values,
+/// read directly), clamping the window itself to its monitor; full screen, at the monitor's or the
+/// mode's size.
 pub struct Window {
     pub fullscreen: Cvar,
     pub width: Cvar,
     pub height: Cvar,
-    /// The pointer to the command system (`idCmdSystem*`), and its vtable (rva): its method at
-    /// [`QUEUE_COMMAND`] `(this, text)` queues text for the main loop to run between frames, as
-    /// typed at the console.
-    pub commands: usize,
-    pub commands_vtable: usize,
+    /// The pointer to the render system (`idRenderSystem*`), and its vtable (rva): its render
+    /// thread is at [`RENDER_THREAD`].
+    pub render_system: usize,
+    pub render_system_vtable: usize,
 }
 
-/// The command system's method that queues a command: its vtable slot.
-pub const QUEUE_COMMAND: usize = 0x48;
-pub type QueueCommandFn = unsafe extern "system" fn(usize, *const u8);
+/// The render system's field holding its render thread (`idRenderThread*`).
+pub const RENDER_THREAD: usize = 0x9b0;
+/// The render thread's flag for `vid_restart`: raised, the thread applies the video cvars at the top
+/// of its next frame (`idRenderSystemLocal::Restart`: the window's style, place and display mode,
+/// the GL context kept) and lowers it after. A video playing holds it until the video ends.
+pub const RESTART_PENDING: usize = 0x333;
 
 /// One game build: where its engine keeps what the producer uses.
 pub struct Build {
@@ -544,8 +547,8 @@ pub static ROWS: [Build; 2] = unsafe { [
             fullscreen: Cvar::id5(0x1d1f240, "r_fullscreen"),
             width: Cvar::id5(0x1d1f3c0, "r_windowWidth"),
             height: Cvar::id5(0x1d1f440, "r_windowHeight"),
-            commands: 0x15ba108,
-            commands_vtable: 0x104fa68,
+            render_system: 0x15a16a8,
+            render_system_vtable: 0xee5b68,
         }),
         stop_time: Cvar::id5(0x1da3000, "g_stopTime"),
         fov: Cvar::id5(0x1da5a00, "g_fov"),
