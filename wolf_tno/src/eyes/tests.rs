@@ -15,6 +15,7 @@ fn read_all(options: &Options, manifest: &Manifest) {
     (crate::LOOK.settings)(options, manifest);
     (crate::GUNS.settings)(options, manifest);
     (crate::cooking::room_scale::ROOM_SCALE.settings)(options, manifest);
+    (crate::RETICLE_REACH.settings)(options, manifest);
     crate::providers::held_item::arms(options);
     crate::cooking::auto_pickup::SWITCH.on(options, manifest);
     crate::extras::mech_levers::SWITCH.on(options, manifest);

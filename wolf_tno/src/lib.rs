@@ -103,6 +103,7 @@ impl Game for Wolf {
             &GUN,
             &HAND_RIG,
             &FINGERS,
+            &RETICLE_REACH,
             &MELEE,
             &GAMEPAD,
             &pad_connected::PAD_CONNECTED,
@@ -271,6 +272,9 @@ fn install_arms(start: &mut Start<'_, Wolf>) -> Result<(), Lack> {
 
 /// A free hand's fingers on the tracked fingers (the left, while the right holds a one-handed gun).
 pub const FINGERS: Component<Wolf> = Component { needs: &[Need::On(&HAND_RIG)], ..monaka_body::feature::fingers() };
+
+/// The reticles on what the aim meets, measured by the viewer in the depth the headset is given.
+pub const RETICLE_REACH: Component<Wolf> = Component { needs: &[Need::On(&HAND_RIG)], ..monaka_body::feature::reticle_reach() };
 
 /// Physical melee (`monaka_body::melee_hit`, on [`providers::melee`]): with the knife or the pipe
 /// in the right hand, a swing of its controller sweeps the game's melee trace along the weapon,

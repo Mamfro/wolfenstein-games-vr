@@ -1233,8 +1233,8 @@ pub const THROWS_KNIVES: &[&str] = &["weapon/knife"];
 
 /// The weapons (by decl name) whose target is the player's focus (what the crosshair is on: the
 /// laser that cuts chains finds what it cuts there): while one is held the focus traces along its
-/// barrel.
-pub const AIMED_BY_FOCUS: &[&str] = &["weapon/lasercutter"]; // monaka-lint: allow
+/// barrel. The game's two cutters, which share one weapon slot.
+pub const AIMED_BY_FOCUS: &[&str] = &["weapon/lasercutter", "weapon/laserkraftwerk"]; // monaka-lint: allow
 
 /// The weapons (by decl name) carried in both hands from the middle: the right hand's tag is the
 /// item's centre, each hand on an edge (the tea tray). They go between both controllers.

@@ -97,6 +97,13 @@ fn a_turn_between_two_directions_takes_one_onto_the_other() {
 }
 
 #[test]
+fn both_cutters_find_their_target_along_the_barrel() {
+    for laser in ["weapon/lasercutter", "weapon/laserkraftwerk"] { // monaka-lint: allow
+        assert!(engine::AIMED_BY_FOCUS.contains(&laser), "{laser}");
+    }
+}
+
+#[test]
 fn guns_are_told_from_what_else_a_hand_holds() {
     for gun in ["weapon/assaultrifle1960", "weapon/shotgun", "weapon/mg60", "weapon/handgun", "weapon/ar60marksman", "weapon/laserkraftwerk", "weapon/lasercutter"] { // monaka-lint: allow
         assert!(is_gun(gun), "{gun}");

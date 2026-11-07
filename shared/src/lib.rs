@@ -7,16 +7,22 @@
 //!
 //! [`view`]: the player's render view at the view builder (id Tech 5 and the Void engine).
 //! [`usercmd`]: the input command's look angles, rewritten after the game built them.
+//! [`heading`]: where the sticks move and turn the player, on the pad the game reads.
 
+pub mod heading;
 pub mod pacing;
 pub mod usercmd;
 pub mod view;
 
+use monaka_contract::manifest::{Kind, Opt, Shown, opt};
 use monaka_core::convention::CameraConvention;
 use monaka_hook::{Instruction, Site, mem};
 use monaka_hook::module::Module;
 use monaka_producer::ledger::{Change, Ledger, Setting};
 use monaka_producer::log;
+
+/// The blur over the screen when the player is hit, off unless the player keeps it.
+pub const DAMAGE_BLUR: Opt = opt("damage_blur", "Damage blur", "Blurs the screen when you're hit. The game only gets it right in one eye.", Kind::Switch { default: false }).on(Shown::Game);
 
 /// Where an `idCVar` keeps its values, before the pointer to its name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

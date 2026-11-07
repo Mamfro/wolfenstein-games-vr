@@ -27,7 +27,7 @@ use monaka_producer::ledger::Setting;
 pub const DISABLE_SCREEN_SHAKE: Opt = opt("disable_screen_shake", "Disable screen shake", "", Kind::Switch { default: false }).on(Shown::Game);
 
 /// The blur over the screen when the player is hit ([`no_screen_blur`] without it).
-pub const DAMAGE_BLUR: Opt = opt("damage_blur", "Damage blur", "Blurs the screen when you're hit. The game only gets it right in one eye.", Kind::Switch { default: false }).on(Shown::Game);
+pub use eng_idt::DAMAGE_BLUR;
 
 /// What the game needs set while VR runs: it keeps playing without focus (the viewer, SteamVR or a
 /// PC check have it), its view bob goes (Monaka's own setting), and its screen shake and damage blur
